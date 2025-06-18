@@ -5,7 +5,7 @@
 
 import gleam/bit_array
 import gleam/dict.{type Dict}
-import gleam/dynamic
+import gleam/dynamic.{type Dynamic}
 import gleam/dynamic/decode as dy_decode
 import gleam/int
 import gleam/io
@@ -23,26 +23,21 @@ import gbor.{
 pub fn parse(
   from bin: BitArray,
   using decoder: dy_decode.Decoder(t),
-) -> Result(t, dy_decode.DecodeError) {
-  let v =
-    dynamic.properties([
-      #(dynamic.string("name"), dynamic.string("daisy")),
-      #(dynamic.string("lives"), dynamic.int(9)),
-      #(
-        dynamic.string("nicknames"),
-        dynamic.list([dynamic.string("shmookie"), dynamic.string("daisy")]),
-      ),
-    ])
+) -> Result(t, List(dy_decode.DecodeError)) {
+  let dy_value = case decode(bin) {
+    #(v, <<>>) -> Ok(v)
+    _ ->
+      Error(dy_decode.decode_error(
+        expected: "No more data, but got more",
+        found: dynamic.nil(),
+      ))
+  }
+  use dy_value <- result.try(dy_value)
 
-  echo dynamic.classify(v)
-
-  let r = dy_decode.run(v, decoder)
-
-  echo r
-  todo
+  dy_decode.run(dy_value, decoder)
 }
 
-pub fn decode(data: BitArray) -> #(GborValue, BitArray) {
+pub fn decode(data: BitArray) -> #(Dynamic, BitArray) {
   case data {
     <<0:3, rest:bits>> -> decode_uint(rest)
     <<1:3, rest:bits>> -> decode_int(rest)
@@ -59,20 +54,20 @@ pub fn decode(data: BitArray) -> #(GborValue, BitArray) {
   }
 }
 
-fn decode_uint(data: BitArray) -> #(GborValue, BitArray) {
+fn decode_uint(data: BitArray) -> #(Dynamic, BitArray) {
   case data {
-    <<24:5, val:int-unsigned-size(8), rest:bits>> -> #(GInt(val), rest)
-    <<25:5, val:int-unsigned-size(16), rest:bits>> -> #(GInt(val), rest)
-    <<26:5, val:int-unsigned-size(32), rest:bits>> -> #(GInt(val), rest)
-    <<27:5, val:int-unsigned-size(64), rest:bits>> -> #(GInt(val), rest)
-    <<val:int-size(5), rest:bits>> if val < 24 -> #(GInt(val), rest)
+    <<24:5, val:int-unsigned-size(8), rest:bits>> -> #(dynamic.int(val), rest)
+    <<25:5, val:int-unsigned-size(16), rest:bits>> -> #(dynamic.int(val), rest)
+    <<26:5, val:int-unsigned-size(32), rest:bits>> -> #(dynamic.int(val), rest)
+    <<27:5, val:int-unsigned-size(64), rest:bits>> -> #(dynamic.int(val), rest)
+    <<val:int-size(5), rest:bits>> if val < 24 -> #(dynamic.int(val), rest)
     _ -> {
       todo
     }
   }
 }
 
-pub fn decode_int(data: BitArray) -> #(GborValue, BitArray) {
+pub fn decode_int(data: BitArray) -> #(Dynamic, BitArray) {
   let #(v, rest) = case data {
     <<24:5, val:int-size(8), rest:bits>> -> #(val, rest)
     <<25:5, val:int-size(16), rest:bits>> -> #(val, rest)
@@ -84,15 +79,16 @@ pub fn decode_int(data: BitArray) -> #(GborValue, BitArray) {
     }
   }
 
-  #(GInt(-1 - v), rest)
+  #(dynamic.int(-1 - v), rest)
 }
 
-pub fn decode_float_or_simple_value(data: BitArray) -> #(GborValue, BitArray) {
+pub fn decode_float_or_simple_value(data: BitArray) -> #(Dynamic, BitArray) {
   case data {
-    <<20:5, rest:bits>> -> #(GBool(False), rest)
-    <<21:5, rest:bits>> -> #(GBool(True), rest)
-    <<22:5, rest:bits>> -> #(GNull, rest)
-    <<23:5, rest:bits>> -> #(GUndefined, rest)
+    <<20:5, rest:bits>> -> #(dynamic.bool(False), rest)
+    <<21:5, rest:bits>> -> #(dynamic.bool(True), rest)
+    <<22:5, rest:bits>> -> #(dynamic.nil(), rest)
+    // Undefined, TODO can we make a specific type for this?
+    <<23:5, rest:bits>> -> #(dynamic.nil(), rest)
     <<25:5, v:bytes-size(2), rest:bits>> -> #(decode_float(v), rest)
     <<26:5, v:bytes-size(4), rest:bits>> -> #(decode_float(v), rest)
     <<27:5, v:bytes-size(8), rest:bits>> -> #(decode_float(v), rest)
@@ -105,7 +101,7 @@ pub fn decode_float_or_simple_value(data: BitArray) -> #(GborValue, BitArray) {
   }
 }
 
-pub fn decode_float(data: BitArray) -> GborValue {
+pub fn decode_float(data: BitArray) -> Dynamic {
   let v = case bit_array.bit_size(data) {
     16 -> from_bytes_16_be(data)
     32 -> from_bytes_32_be(data)
@@ -114,24 +110,24 @@ pub fn decode_float(data: BitArray) -> GborValue {
   }
 
   case to_finite(v) {
-    Ok(v) -> GFloat(v)
+    Ok(v) -> dynamic.float(v)
     Error(_) -> todo
   }
 }
 
-pub fn decode_bytes(data: BitArray) -> #(GborValue, BitArray) {
+pub fn decode_bytes(data: BitArray) -> #(Dynamic, BitArray) {
   let #(v, rest) = decode_bytes_helper(data)
-  #(GBinary(v), rest)
+  #(dynamic.bit_array(v), rest)
 }
 
-pub fn decode_string(data: BitArray) -> #(GborValue, BitArray) {
+pub fn decode_string(data: BitArray) -> #(Dynamic, BitArray) {
   let #(v, rest) = decode_bytes_helper(data)
 
   // TODO handle error on parse
   let v =
     bit_array.to_string(v)
     |> result.unwrap("TODO")
-    |> GString
+    |> dynamic.string
 
   #(v, rest)
 }
@@ -144,7 +140,7 @@ pub fn decode_bytes_helper(data: BitArray) -> #(BitArray, BitArray) {
   }
 }
 
-pub fn decode_array(data: BitArray) -> #(GborValue, BitArray) {
+pub fn decode_array(data: BitArray) -> #(Dynamic, BitArray) {
   let #(n, rest) = case data {
     <<24:5, n:int-unsigned-size(8), rest:bits>> -> #(n, rest)
     <<25:5, n:int-unsigned-size(16), rest:bits>> -> #(n, rest)
@@ -157,14 +153,14 @@ pub fn decode_array(data: BitArray) -> #(GborValue, BitArray) {
 
   let #(values, rest) = decode_array_helper(rest, n, [])
 
-  #(GArray(list.reverse(values)), rest)
+  #(dynamic.list(list.reverse(values)), rest)
 }
 
 pub fn decode_array_helper(
   data: BitArray,
   n: Int,
-  acc: List(GborValue),
-) -> #(List(GborValue), BitArray) {
+  acc: List(Dynamic),
+) -> #(List(Dynamic), BitArray) {
   case n {
     0 -> #(acc, data)
     _ -> {
@@ -174,7 +170,7 @@ pub fn decode_array_helper(
   }
 }
 
-pub fn decode_map(data: BitArray) -> #(GborValue, BitArray) {
+pub fn decode_map(data: BitArray) -> #(Dynamic, BitArray) {
   let #(n, rest) = case data {
     <<24:5, n:int-unsigned-size(8), rest:bits>> -> #(n, rest)
     <<25:5, n:int-unsigned-size(16), rest:bits>> -> #(n, rest)
@@ -198,8 +194,7 @@ pub fn decode_map(data: BitArray) -> #(GborValue, BitArray) {
         _ -> todo
       }
     })
-    |> dict.from_list
-    |> GMap
+    |> dynamic.properties
 
   #(map, rest)
 }
