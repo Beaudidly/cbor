@@ -1,23 +1,11 @@
-////<<25:5, n:int-unsigned-size(16), rest:bits>> -> #(n, rest)
-////<<26:5, n:int-unsigned-size(32), rest:bits>> -> #(n, rest)
-////<<27:5, n:int-unsigned-size(64), rest:bits>> -> #(n, rest)
-//// TODO break limited
-
 import gleam/bit_array
-import gleam/dict.{type Dict}
 import gleam/dynamic.{type Dynamic}
 import gleam/dynamic/decode as dy_decode
 import gleam/int
-import gleam/io
 import gleam/list
 import gleam/result
 import ieee_float.{
   from_bytes_16_be, from_bytes_32_be, from_bytes_64_be, to_finite,
-}
-
-import gbor.{
-  type GborValue, GArray, GBinary, GBool, GFloat, GInt, GMap, GNull, GString,
-  GUndefined,
 }
 
 pub fn parse(
@@ -28,7 +16,7 @@ pub fn parse(
     #(v, <<>>) -> Ok(v)
     _ ->
       Error(dy_decode.decode_error(
-        expected: "No more data, but got more",
+        expected: "Expected no more data, but got more",
         found: dynamic.nil(),
       ))
   }

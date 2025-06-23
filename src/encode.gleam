@@ -14,10 +14,6 @@ pub opaque type CBOR {
   Binary(BitArray)
 }
 
-//pub fn uint(value: Int) -> CBOR {
-//  Uint(value)
-//}
-
 pub fn int(value: Int) -> CBOR {
   Int(value)
 }
