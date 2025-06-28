@@ -53,6 +53,13 @@ pub fn int_test() {
   |> should.equal("38FF")
 }
 
+pub fn float_test() {
+  encode.float(3.14)
+  |> encode.to_bit_array
+  |> bit_array.base16_encode
+  |> should.equal("FB40091EB851EB851F")
+}
+
 pub fn string_test() {
   encode.string("Hello, world!")
   |> encode.to_bit_array

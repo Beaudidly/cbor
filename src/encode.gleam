@@ -95,9 +95,12 @@ pub fn int_encode(value: Int) -> BitArray {
 }
 
 fn float_encode(value: Float) -> BitArray {
-  value
-  |> ieee_float.finite
-  |> ieee_float.to_bytes_64_be
+  let bytes =
+    value
+    |> ieee_float.finite
+    |> ieee_float.to_bytes_64_be
+
+  <<7:3, 27:5, bytes:bits>>
 }
 
 type BinaryEncoding {
