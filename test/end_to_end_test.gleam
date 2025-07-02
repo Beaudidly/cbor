@@ -2,6 +2,7 @@ import decode.{type CborDecodeError, UnimplementedError}
 import encode
 import gbor
 import gleam/bit_array
+import gleam/dynamic
 import gleam/dynamic/decode as dy_decode
 import gleam/io
 import gleam/json
@@ -119,6 +120,21 @@ fn run_test_vector(test_vector: TestVector) -> Result(Nil, TestVectorError) {
     }
     False -> Ok(Nil)
   }
+}
+
+// Manual test vectors
+pub fn null_test() {
+  let vector =
+    TestVector(
+      cbor: "9g==",
+      hex: "F6",
+      roundtrip: True,
+      decoded: Some(dynamic.nil()),
+      diagnostic: None,
+    )
+
+  let assert Ok(Nil) = run_test_vector(vector)
+  Nil
 }
 
 pub type Cat {

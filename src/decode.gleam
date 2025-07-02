@@ -4,6 +4,7 @@ import gleam/dict
 import gleam/dynamic.{type Dynamic}
 import gleam/dynamic/decode as gdd
 import gleam/list
+import gleam/option
 import gleam/result
 import ieee_float.{
   from_bytes_16_be, from_bytes_32_be, from_bytes_64_be, to_finite,
@@ -39,6 +40,7 @@ pub fn parse(
 }
 
 pub fn cbor_decoder() -> gdd.Decoder(CBOR) {
+  use <- gdd.recursive
   gdd.new_primitive_decoder("Custom", fn(data) { decode_cbor(data) })
 }
 
@@ -52,6 +54,12 @@ pub fn decode_cbor(data: dynamic.Dynamic) -> Result(CBOR, CBOR) {
       gdd.map(gdd.bit_array, gbor.Binary),
       gdd.map(gdd.dict(cbor_decoder(), cbor_decoder()), fn(v) {
         gbor.Map(dict.to_list(v))
+      }),
+      gdd.map(gdd.optional(cbor_decoder()), fn(v) {
+        case v {
+          option.None -> gbor.Null
+          option.Some(s) -> s
+        }
       }),
     ])
 
@@ -71,7 +79,15 @@ pub fn decode(data: BitArray) -> Result(#(Dynamic, BitArray), CborDecodeError) {
     <<5:3, rest:bits>> -> decode_map(rest)
     <<7:3, rest:bits>> -> decode_float_or_simple_value(rest)
     <<n:3, rest:bits>> -> Error(MajorTypeError(n))
-    _ -> todo
+    <<>> -> {
+      Error(
+        DynamicDecodeError(gdd.decode_error(
+          expected: "Expected data, but got none",
+          found: dynamic.nil(),
+        )),
+      )
+    }
+    v -> todo
   }
 }
 
