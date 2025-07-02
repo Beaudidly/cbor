@@ -1,6 +1,6 @@
-import cbor
 import decode.{type CborDecodeError, UnimplementedError}
 import encode
+import gbor
 import gleam/bit_array
 import gleam/dynamic/decode as dy_decode
 import gleam/io
@@ -132,7 +132,7 @@ pub type Cat {
   )
 }
 
-fn cat_encoder(cat: Cat) -> cbor.CBOR {
+fn cat_encoder(cat: Cat) -> gbor.CBOR {
   encode.map([
     #(encode.string("name"), encode.string(cat.name)),
     #(encode.string("lives"), encode.int(cat.lives)),

@@ -1,4 +1,4 @@
-import cbor.{type CBOR}
+import gbor.{type CBOR}
 import gleam/bit_array
 import gleam/dict
 import gleam/dynamic.{type Dynamic}
@@ -44,20 +44,20 @@ pub fn cbor_decoder() -> gdd.Decoder(CBOR) {
 
 pub fn decode_cbor(data: dynamic.Dynamic) -> Result(CBOR, CBOR) {
   let d =
-    gdd.one_of(gdd.map(gdd.int, cbor.Int), [
-      gdd.map(gdd.float, cbor.Float),
-      gdd.map(gdd.string, cbor.String),
-      gdd.map(gdd.list(cbor_decoder()), fn(v) { cbor.Array(v) }),
-      gdd.map(gdd.bool, cbor.Bool),
-      gdd.map(gdd.bit_array, cbor.Binary),
+    gdd.one_of(gdd.map(gdd.int, gbor.Int), [
+      gdd.map(gdd.float, gbor.Float),
+      gdd.map(gdd.string, gbor.String),
+      gdd.map(gdd.list(cbor_decoder()), fn(v) { gbor.Array(v) }),
+      gdd.map(gdd.bool, gbor.Bool),
+      gdd.map(gdd.bit_array, gbor.Binary),
       gdd.map(gdd.dict(cbor_decoder(), cbor_decoder()), fn(v) {
-        cbor.Map(dict.to_list(v))
+        gbor.Map(dict.to_list(v))
       }),
     ])
 
   case gdd.run(data, d) {
     Ok(v) -> Ok(v)
-    Error(_) -> Error(cbor.Undefined)
+    Error(_) -> Error(gbor.Undefined)
   }
 }
 

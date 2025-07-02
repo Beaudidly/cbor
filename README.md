@@ -1,13 +1,15 @@
-# cbor
+# gbor
 
-[![Package Version](https://img.shields.io/hexpm/v/cbor)](https://hex.pm/packages/cbor)
-[![Hex Docs](https://img.shields.io/badge/hex-docs-ffaff3)](https://hexdocs.pm/cbor/)
+[![Package Version](https://img.shields.io/hexpm/v/gbor)](https://hex.pm/packages/gbor)
+[![Hex Docs](https://img.shields.io/badge/hex-docs-ffaff3)](https://hexdocs.pm/gbor/)
+
+A CBOR encoding/decoding library for Gleam.
 
 # Installation
 Add GitHub
 ```toml
 [dependencies]
-cbor = { git = "git@github.com:Beaudidly/cbor.git", ref = "main" }
+gbor = { git = "git@github.com:Beaudidly/gbor.git", ref = "main" }
 ```
 
 # Usage
@@ -15,7 +17,7 @@ Please check out the encode/decode tests.
 
 ## Encode
 ```gleam
-import cbor
+import gbor
 import gleam/list
 
 type Cat {
@@ -37,7 +39,7 @@ fn cat_encoder(cat: Cat) -> BitArray {
 
 ## Decode
 ```gleam
-import cbor
+import gbor
 import gleam/dynamic/decode as dy_decode
 
 fn decode_cat(data: BitArray) -> Result(Cat, List(dy_decode.DecodeError)) {

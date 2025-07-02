@@ -1,9 +1,9 @@
-name = "cbor"
+name = "gbor"
 version = "1.0.0"
 
 description = "A Gleam implementation of the CBOR standard"
 licences = ["Apache-2.0"]
-repository = { type = "github", user = "Beaudidly", repo = "https://github.com/Beaudidly/cbor" }
+repository = { type = "github", user = "Beaudidly", repo = "https://github.com/Beaudidly/gbor" }
 
 [dependencies]
 gleam_stdlib = ">= 0.44.0 and < 2.0.0"
