@@ -1,3 +1,4 @@
+import cbor
 import decode.{type CborDecodeError, UnimplementedError}
 import encode
 import gleam/bit_array
@@ -28,6 +29,7 @@ type TestVector {
 type TestVectorError {
   TestVectorError(error: CborDecodeError, test_vector: TestVector)
   UnfinishedTest(info: String, test_vector: TestVector)
+  RoundtripError(test_vector: TestVector, expected: BitArray, actual: BitArray)
 }
 
 fn test_vector_decoder() -> dy_decode.Decoder(TestVector) {
@@ -72,16 +74,16 @@ pub fn test_vectors_test() {
 
 fn run_test_vector(test_vector: TestVector) -> Result(Nil, TestVectorError) {
   // TODO we should move this to decode parse
-  let assert Ok(data) = bit_array.base64_decode(test_vector.cbor)
+  let assert Ok(original_data) = bit_array.base64_decode(test_vector.cbor)
   use #(cbor_decoded, rest) <- result.try(
-    decode.decode(data)
+    decode.decode(original_data)
     |> result.map_error(fn(e) { TestVectorError(error: e, test_vector:) }),
   )
 
   assert rest == <<>>
 
   // TODO validate that theres either diagnostic or decoded
-  case #(test_vector.decoded, test_vector.diagnostic) {
+  use _ <- result.try(case #(test_vector.decoded, test_vector.diagnostic) {
     #(Some(_), Some(_)) -> {
       panic as "Both decoded and diagnostic are present"
     }
@@ -99,8 +101,24 @@ fn run_test_vector(test_vector: TestVector) -> Result(Nil, TestVectorError) {
       // TODO handle null or undefined case for decoded
       Error(UnfinishedTest(info: "No decoded or diagnostic", test_vector:))
     }
+  })
+
+  case test_vector.roundtrip {
+    True -> {
+      let assert Ok(decoded_from_dy) = decode.decode_cbor(cbor_decoded)
+      let re_encoded = encode.to_bit_array(decoded_from_dy)
+      case re_encoded == original_data {
+        True -> Ok(Nil)
+        False ->
+          Error(RoundtripError(
+            test_vector:,
+            expected: re_encoded,
+            actual: original_data,
+          ))
+      }
+    }
+    False -> Ok(Nil)
   }
-  // TODO figure out how to test roundtrip
 }
 
 pub type Cat {
@@ -114,7 +132,7 @@ pub type Cat {
   )
 }
 
-fn cat_encoder(cat: Cat) -> encode.CBOR {
+fn cat_encoder(cat: Cat) -> cbor.CBOR {
   encode.map([
     #(encode.string("name"), encode.string(cat.name)),
     #(encode.string("lives"), encode.int(cat.lives)),

@@ -1,67 +1,56 @@
+import cbor.{type CBOR}
 import gleam/bit_array
 import gleam/list
 import ieee_float
 
-pub opaque type CBOR {
-  Int(Int)
-  String(String)
-  Float(Float)
-  Map(List(#(CBOR, CBOR)))
-  Array(List(CBOR))
-  Bool(Bool)
-  Null
-  Undefined
-  Binary(BitArray)
-}
-
 pub fn int(value: Int) -> CBOR {
-  Int(value)
+  cbor.Int(value)
 }
 
 pub fn map(value: List(#(CBOR, CBOR))) -> CBOR {
-  Map(value)
+  cbor.Map(value)
 }
 
 pub fn string(value: String) -> CBOR {
-  String(value)
+  cbor.String(value)
 }
 
 pub fn array(value: List(CBOR)) -> CBOR {
-  Array(value)
+  cbor.Array(value)
 }
 
 pub fn bool(value: Bool) -> CBOR {
-  Bool(value)
+  cbor.Bool(value)
 }
 
 pub fn null() -> CBOR {
-  Null
+  cbor.Null
 }
 
 pub fn undefined() -> CBOR {
-  Undefined
+  cbor.Undefined
 }
 
 pub fn float(value: Float) -> CBOR {
-  Float(value)
+  cbor.Float(value)
 }
 
 pub fn binary(value: BitArray) -> CBOR {
-  Binary(value)
+  cbor.Binary(value)
 }
 
 pub fn to_bit_array(value: CBOR) -> BitArray {
   case value {
-    Int(v) if v >= 0 -> uint_encode(v)
-    Int(v) if v < 0 -> int_encode(v)
-    Float(v) -> float_encode(v)
-    Binary(v) -> binary_encode(BinaryEncoding(v))
-    String(v) -> binary_encode(StringEncoding(v))
-    Array(v) -> array_encode(v)
-    Map(v) -> map_encode(v)
-    Bool(v) -> bool_encode(v)
-    Null -> null_encode()
-    Undefined -> undefined_encode()
+    cbor.Int(v) if v >= 0 -> uint_encode(v)
+    cbor.Int(v) if v < 0 -> int_encode(v)
+    cbor.Float(v) -> float_encode(v)
+    cbor.Binary(v) -> binary_encode(BinaryEncoding(v))
+    cbor.String(v) -> binary_encode(StringEncoding(v))
+    cbor.Array(v) -> array_encode(v)
+    cbor.Map(v) -> map_encode(v)
+    cbor.Bool(v) -> bool_encode(v)
+    cbor.Null -> null_encode()
+    cbor.Undefined -> undefined_encode()
     v -> {
       echo v
       todo

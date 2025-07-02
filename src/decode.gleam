@@ -1,8 +1,8 @@
+import cbor.{type CBOR}
 import gleam/bit_array
+import gleam/dict
 import gleam/dynamic.{type Dynamic}
-import gleam/dynamic/decode.{type DecodeError}
-import gleam/dynamic/decode as dy_decode
-import gleam/int
+import gleam/dynamic/decode as gdd
 import gleam/list
 import gleam/result
 import ieee_float.{
@@ -10,7 +10,7 @@ import ieee_float.{
 }
 
 pub type CborDecodeError {
-  DynamicDecodeError(List(DecodeError))
+  DynamicDecodeError(List(gdd.DecodeError))
   MajorTypeError(Int)
   ReservedError
   UnimplementedError(String)
@@ -19,12 +19,12 @@ pub type CborDecodeError {
 
 pub fn parse(
   from bin: BitArray,
-  using decoder: dy_decode.Decoder(t),
+  using decoder: gdd.Decoder(t),
 ) -> Result(t, CborDecodeError) {
   use dy <- result.try(case decode(bin) {
     Ok(#(dy_value, <<>>)) -> Ok(dy_value)
     Ok(#(_, rest)) -> {
-      dy_decode.decode_error(
+      gdd.decode_error(
         expected: "Expected no more data, but got more",
         found: dynamic.bit_array(rest),
       )
@@ -34,8 +34,31 @@ pub fn parse(
     Error(e) -> Error(e)
   })
 
-  dy_decode.run(dy, decoder)
+  gdd.run(dy, decoder)
   |> result.map_error(fn(e) { DynamicDecodeError(e) })
+}
+
+pub fn cbor_decoder() -> gdd.Decoder(CBOR) {
+  gdd.new_primitive_decoder("Custom", fn(data) { decode_cbor(data) })
+}
+
+pub fn decode_cbor(data: dynamic.Dynamic) -> Result(CBOR, CBOR) {
+  let d =
+    gdd.one_of(gdd.map(gdd.int, cbor.Int), [
+      gdd.map(gdd.float, cbor.Float),
+      gdd.map(gdd.string, cbor.String),
+      gdd.map(gdd.list(cbor_decoder()), fn(v) { cbor.Array(v) }),
+      gdd.map(gdd.bool, cbor.Bool),
+      gdd.map(gdd.bit_array, cbor.Binary),
+      gdd.map(gdd.dict(cbor_decoder(), cbor_decoder()), fn(v) {
+        cbor.Map(dict.to_list(v))
+      }),
+    ])
+
+  case gdd.run(data, d) {
+    Ok(v) -> Ok(v)
+    Error(_) -> Error(cbor.Undefined)
+  }
 }
 
 pub fn decode(data: BitArray) -> Result(#(Dynamic, BitArray), CborDecodeError) {
@@ -66,7 +89,7 @@ fn decode_uint(data: BitArray) -> Result(#(Dynamic, BitArray), CborDecodeError) 
     <<val:int-size(5), rest:bits>> if 30 >= val && val >= 28 ->
       Error(ReservedError)
     v -> {
-      dy_decode.decode_error(
+      gdd.decode_error(
         expected: "Did not find a valid uint",
         found: dynamic.bit_array(v),
       )
@@ -88,7 +111,7 @@ pub fn decode_int(
     <<val:int-size(5), _:bits>> if 30 >= val && val >= 28 ->
       Error(ReservedError)
     v -> {
-      dy_decode.decode_error(
+      gdd.decode_error(
         expected: "Did not find a valid int",
         found: dynamic.bit_array(v),
       )
@@ -119,7 +142,7 @@ pub fn decode_float_or_simple_value(
     <<n:int-size(5), _:bits>> if n >= 24 && n <= 31 -> Error(ReservedError)
     <<n:int-size(5), _:bits>> if n >= 32 -> Error(UnassignedError)
     v -> {
-      dy_decode.decode_error(
+      gdd.decode_error(
         expected: "Did not find a valid float or simple value",
         found: dynamic.bit_array(v),
       )
@@ -138,7 +161,7 @@ pub fn decode_float(
     32 -> Ok(from_bytes_32_be(data))
     64 -> Ok(from_bytes_64_be(data))
     n -> {
-      dy_decode.decode_error(
+      gdd.decode_error(
         expected: "Did not find a valid float size",
         found: dynamic.int(n),
       )
@@ -150,7 +173,7 @@ pub fn decode_float(
   case to_finite(v) {
     Ok(v) -> Ok(#(dynamic.float(v), rest))
     Error(_) -> {
-      dy_decode.decode_error(
+      gdd.decode_error(
         expected: "Valid float, but got NaN/Inf",
         found: dynamic.nil(),
       )
