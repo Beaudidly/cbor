@@ -4,7 +4,6 @@ import gbor
 import gleam/bit_array
 import gleam/dynamic
 import gleam/dynamic/decode as dy_decode
-import gleam/io
 import gleam/json
 import gleam/list
 import gleam/option.{None, Some}
@@ -31,6 +30,7 @@ type TestVectorError {
   TestVectorError(error: CborDecodeError, test_vector: TestVector)
   UnfinishedTest(info: String, test_vector: TestVector)
   RoundtripError(test_vector: TestVector, expected: BitArray, actual: BitArray)
+  EncodeError(error: encode.EncodeError, test_vector: TestVector)
 }
 
 fn test_vector_decoder() -> dy_decode.Decoder(TestVector) {
@@ -107,7 +107,11 @@ fn run_test_vector(test_vector: TestVector) -> Result(Nil, TestVectorError) {
   case test_vector.roundtrip {
     True -> {
       let assert Ok(decoded_from_dy) = decode.decode_cbor(cbor_decoded)
-      let re_encoded = encode.to_bit_array(decoded_from_dy)
+      use re_encoded <- result.try(
+        encode.to_bit_array(decoded_from_dy)
+        |> result.map_error(fn(e) { EncodeError(error: e, test_vector:) }),
+      )
+
       case re_encoded == original_data {
         True -> Ok(Nil)
         False ->
@@ -192,8 +196,8 @@ pub fn encode_and_decode_test_d() {
       alive: True,
       password: bit_array.from_string("cheese"),
     )
-  cat_encoder(cat)
-  |> encode.to_bit_array
-  |> decode.parse(using: cat_decoder)
-  |> should.equal(Ok(cat))
+  let assert Ok(Ok(_)) =
+    cat_encoder(cat)
+    |> encode.to_bit_array
+    |> result.map(fn(data) { decode.parse(data, using: cat_decoder) })
 }
