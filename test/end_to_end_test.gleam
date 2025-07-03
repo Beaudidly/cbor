@@ -102,7 +102,8 @@ fn run_test_vector(test_vector: TestVector) -> Result(Nil, TestVectorError) {
 
   case test_vector.roundtrip {
     True -> {
-      let assert Ok(decoded_from_dy) = decode.decode_cbor(cbor_decoded)
+      let assert Ok(decoded_from_dy) =
+        gdd.run(cbor_decoded, decode.cbor_decoder())
       use re_encoded <- result.try(
         encode.to_bit_array(decoded_from_dy)
         |> result.map_error(fn(e) { EncodeError(error: e, test_vector:) }),

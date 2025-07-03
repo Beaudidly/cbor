@@ -41,32 +41,23 @@ pub fn parse(
 
 pub fn cbor_decoder() -> gdd.Decoder(CBOR) {
   use <- gdd.recursive
-  gdd.new_primitive_decoder("Custom", fn(data) { decode_cbor(data) })
-}
-
-pub fn decode_cbor(data: dynamic.Dynamic) -> Result(CBOR, CBOR) {
-  let d =
-    gdd.one_of(gdd.map(gdd.int, gbor.Int), [
-      gdd.map(gdd.float, gbor.Float),
-      gdd.map(gdd.string, gbor.String),
-      gdd.map(gdd.list(cbor_decoder()), fn(v) { gbor.Array(v) }),
-      gdd.map(gdd.bool, gbor.Bool),
-      gdd.map(gdd.bit_array, gbor.Binary),
-      gdd.map(gdd.dict(cbor_decoder(), cbor_decoder()), fn(v) {
-        gbor.Map(dict.to_list(v))
-      }),
-      gdd.map(gdd.optional(cbor_decoder()), fn(v) {
-        case v {
-          option.None -> gbor.Null
-          option.Some(s) -> s
-        }
-      }),
-    ])
-
-  case gdd.run(data, d) {
-    Ok(v) -> Ok(v)
-    Error(_) -> Error(gbor.Undefined)
-  }
+  gdd.one_of(gdd.map(gdd.int, gbor.Int), [
+    gdd.map(gdd.float, gbor.Float),
+    gdd.map(gdd.string, gbor.String),
+    gdd.map(gdd.list(cbor_decoder()), fn(v) { gbor.Array(v) }),
+    gdd.map(gdd.bool, gbor.Bool),
+    gdd.map(gdd.bit_array, gbor.Binary),
+    gdd.map(gdd.dict(cbor_decoder(), cbor_decoder()), fn(v) {
+      gbor.Map(dict.to_list(v))
+    }),
+    gdd.map(gdd.dynamic, fn(a) {
+      let dnil = dynamic.nil()
+      case a {
+        _nil if a == dnil -> gbor.Null
+        _ -> gbor.Undefined
+      }
+    }),
+  ])
 }
 
 pub fn decode(data: BitArray) -> Result(#(Dynamic, BitArray), CborDecodeError) {

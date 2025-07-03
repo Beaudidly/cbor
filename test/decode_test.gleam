@@ -1,5 +1,8 @@
 import decode.{decode}
+import gbor
 import gleam/bit_array
+import gleam/dynamic
+import gleam/dynamic/decode as gdd
 import gleeunit
 import gleeunit/should
 
@@ -36,4 +39,8 @@ pub fn decode_array_test() {
   let assert Ok(data) = bit_array.base16_decode("8401020304")
   decode.parse(from: data, using: dy_decode.list(dy_decode.int))
   |> should.equal(Ok([1, 2, 3, 4]))
+}
+
+pub fn decode_cbor_test() {
+  assert Ok(gbor.Null) == gdd.run(dynamic.nil(), decode.cbor_decoder())
 }
