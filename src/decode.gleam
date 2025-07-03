@@ -4,8 +4,8 @@ import gleam/dict
 import gleam/dynamic.{type Dynamic}
 import gleam/dynamic/decode as gdd
 import gleam/list
-import gleam/option
 import gleam/result
+import gleam/string
 import ieee_float.{
   from_bytes_16_be, from_bytes_32_be, from_bytes_64_be, to_finite,
 }
@@ -69,7 +69,7 @@ pub fn decode(data: BitArray) -> Result(#(Dynamic, BitArray), CborDecodeError) {
     <<4:3, rest:bits>> -> decode_array(rest)
     <<5:3, rest:bits>> -> decode_map(rest)
     <<7:3, rest:bits>> -> decode_float_or_simple_value(rest)
-    <<n:3, rest:bits>> -> Error(MajorTypeError(n))
+    <<n:3, _:bits>> -> Error(MajorTypeError(n))
     <<>> -> {
       Error(
         DynamicDecodeError(gdd.decode_error(
@@ -78,7 +78,11 @@ pub fn decode(data: BitArray) -> Result(#(Dynamic, BitArray), CborDecodeError) {
         )),
       )
     }
-    v -> todo
+    v -> {
+      Error(UnimplementedError(
+        "Didn't know how to handle parsing from data: " <> string.inspect(v),
+      ))
+    }
   }
 }
 
@@ -93,7 +97,7 @@ fn decode_uint(data: BitArray) -> Result(#(Dynamic, BitArray), CborDecodeError) 
     <<27:5, val:int-unsigned-size(64), rest:bits>> ->
       Ok(#(dynamic.int(val), rest))
     <<val:int-size(5), rest:bits>> if val <= 23 -> Ok(#(dynamic.int(val), rest))
-    <<val:int-size(5), rest:bits>> if 30 >= val && val >= 28 ->
+    <<val:int-size(5), _:bits>> if 30 >= val && val >= 28 ->
       Error(ReservedError)
     v -> {
       gdd.decode_error(
@@ -202,11 +206,16 @@ pub fn decode_string(
 ) -> Result(#(Dynamic, BitArray), CborDecodeError) {
   use #(v, rest) <- result.try(decode_bytes_helper(data))
 
-  // TODO handle error on parse
   let v =
     bit_array.to_string(v)
-    |> result.unwrap("TODO")
-    |> dynamic.string
+    |> result.map(fn(s) { dynamic.string(s) })
+    |> result.map_error(fn(_) {
+      DynamicDecodeError(gdd.decode_error(
+        expected: "Expected a string",
+        found: dynamic.bit_array(v),
+      ))
+    })
+  use v <- result.try(v)
 
   Ok(#(v, rest))
 }
@@ -218,9 +227,12 @@ pub fn decode_bytes_helper(
     <<24:5, n:int-unsigned-size(8), v:bytes-size(n), rest:bits>> ->
       Ok(#(v, rest))
     <<n:int-size(5), v:bytes-size(n), rest:bits>> if n < 24 -> Ok(#(v, rest))
-    <<31:5, v:bits>> ->
+    <<31:5, _v:bits>> ->
       Error(UnimplementedError("Indeterminate sizes not supported yet."))
-    _ -> todo
+    v ->
+      Error(UnimplementedError(
+        "Didn't know how to handle bytes type from data: " <> string.inspect(v),
+      ))
   }
 }
 
@@ -237,8 +249,10 @@ pub fn decode_array(
     <<31:5, _:bits>> ->
       Error(UnimplementedError("Indeterminate lengths not supported yet."))
     v -> {
-      echo v
-      todo
+      Error(UnimplementedError(
+        "Didn't know how to handle parsing an array from data: "
+        <> string.inspect(v),
+      ))
     }
   })
 
@@ -274,8 +288,10 @@ pub fn decode_map(
     <<31:5, _:bits>> ->
       Error(UnimplementedError("Indeterminate lengths not supported yet."))
     v -> {
-      echo v
-      todo
+      Error(UnimplementedError(
+        "Didn't know how to handle parsing a map from data: "
+        <> string.inspect(v),
+      ))
     }
   })
 
@@ -285,14 +301,22 @@ pub fn decode_map(
   let map =
     list.reverse(values)
     |> list.sized_chunk(2)
-    |> list.map(fn(x) {
+    |> list.try_map(fn(x) {
       case x {
-        [k, v] -> #(k, v)
+        [k, v] -> Ok(#(k, v))
         // TODO check if values are even
-        _ -> todo
+        v -> {
+          Error(
+            DynamicDecodeError(gdd.decode_error(
+              expected: "Expected even number of values",
+              found: dynamic.list(v),
+            )),
+          )
+        }
       }
     })
-    |> dynamic.properties
+    |> result.map(dynamic.properties)
+  use map <- result.try(map)
 
   Ok(#(map, rest))
 }
