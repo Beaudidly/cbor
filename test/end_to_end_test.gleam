@@ -3,7 +3,7 @@ import encode
 import gbor
 import gleam/bit_array
 import gleam/dynamic
-import gleam/dynamic/decode as dy_decode
+import gleam/dynamic/decode as gdd
 import gleam/json
 import gleam/list
 import gleam/option.{None, Some}
@@ -21,7 +21,7 @@ type TestVector {
     cbor: String,
     hex: String,
     roundtrip: Bool,
-    decoded: option.Option(dy_decode.Dynamic),
+    decoded: option.Option(gdd.Dynamic),
     diagnostic: option.Option(String),
   )
 }
@@ -33,25 +33,21 @@ type TestVectorError {
   EncodeError(error: encode.EncodeError, test_vector: TestVector)
 }
 
-fn test_vector_decoder() -> dy_decode.Decoder(TestVector) {
-  use cbor <- dy_decode.field("cbor", dy_decode.string)
-  use hex <- dy_decode.field("hex", dy_decode.string)
-  use roundtrip <- dy_decode.field("roundtrip", dy_decode.bool)
-  use decoded <- dy_decode.optional_field(
-    "decoded",
-    None,
-    dy_decode.optional(dy_decode.dynamic),
-  )
-  use diagnostic <- dy_decode.optional_field(
+fn test_vector_decoder() -> gdd.Decoder(TestVector) {
+  use cbor <- gdd.field("cbor", gdd.string)
+  use hex <- gdd.field("hex", gdd.string)
+  use roundtrip <- gdd.field("roundtrip", gdd.bool)
+  use decoded <- gdd.optional_field("decoded", None, gdd.optional(gdd.dynamic))
+  use diagnostic <- gdd.optional_field(
     "diagnostic",
     None,
-    dy_decode.optional(dy_decode.string),
+    gdd.optional(gdd.string),
   )
-  dy_decode.success(TestVector(cbor:, hex:, roundtrip:, decoded:, diagnostic:))
+  gdd.success(TestVector(cbor:, hex:, roundtrip:, decoded:, diagnostic:))
 }
 
-fn appendix_decoder() -> dy_decode.Decoder(List(TestVector)) {
-  dy_decode.list(test_vector_decoder())
+fn appendix_decoder() -> gdd.Decoder(List(TestVector)) {
+  gdd.list(test_vector_decoder())
 }
 
 pub fn test_vectors_test() {
@@ -168,23 +164,13 @@ fn cat_encoder(cat: Cat) -> gbor.CBOR {
 
 pub fn encode_and_decode_test_d() {
   let cat_decoder = {
-    use name <- dy_decode.field("name", dy_decode.string)
-    use lives <- dy_decode.field("lives", dy_decode.int)
-    use nicknames <- dy_decode.field(
-      "nicknames",
-      dy_decode.list(dy_decode.string),
-    )
-    use fav_num <- dy_decode.field("fav_num", dy_decode.float)
-    use alive <- dy_decode.field("alive", dy_decode.bool)
-    use password <- dy_decode.field("password", dy_decode.bit_array)
-    dy_decode.success(Cat(
-      name:,
-      lives:,
-      nicknames:,
-      fav_num:,
-      alive:,
-      password:,
-    ))
+    use name <- gdd.field("name", gdd.string)
+    use lives <- gdd.field("lives", gdd.int)
+    use nicknames <- gdd.field("nicknames", gdd.list(gdd.string))
+    use fav_num <- gdd.field("fav_num", gdd.float)
+    use alive <- gdd.field("alive", gdd.bool)
+    use password <- gdd.field("password", gdd.bit_array)
+    gdd.success(Cat(name:, lives:, nicknames:, fav_num:, alive:, password:))
   }
 
   let cat =
