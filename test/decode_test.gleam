@@ -31,16 +31,23 @@ pub fn decode_cat_test() {
     bit_array.base16_decode(
       "A3646E616D65656461697379656C6976657309696E69636B6E616D657382697363686D6F6F6B6965656461697365",
     )
-  decode.parse(from: data, using: cat_decoder)
-  |> should.equal(Ok(Cat("daisy", 9, ["schmookie", "daise"])))
+
+  todo
+  //decode.decode(data)
+  //|> should.equal(Ok(Cat("daisy", 9, ["schmookie", "daise"])))
 }
 
 pub fn decode_array_test() {
   let assert Ok(data) = bit_array.base16_decode("8401020304")
-  decode.parse(from: data, using: dy_decode.list(dy_decode.int))
-  |> should.equal(Ok([1, 2, 3, 4]))
+  let assert Ok(#(gbor.Array(v), <<>>)) = decode.decode(data)
+  assert v == [gbor.Int(1), gbor.Int(2), gbor.Int(3), gbor.Int(4)]
 }
 
 pub fn decode_cbor_test() {
-  assert Ok(gbor.Null) == gdd.run(dynamic.nil(), decode.cbor_decoder())
+  let assert Ok(data) = bit_array.base16_decode("F6")
+
+  let assert Ok(#(v, rest)) = decode.decode(data)
+
+  assert v == gbor.Null
+  assert rest == <<>>
 }

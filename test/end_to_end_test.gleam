@@ -1,3 +1,5 @@
+//// TODO validate that theres either diagnostic or decoded
+
 import decode.{type CborDecodeError, UnimplementedError}
 import encode
 import gbor
@@ -8,6 +10,7 @@ import gleam/json
 import gleam/list
 import gleam/option.{None, Some}
 import gleam/result
+import gleam/string
 import gleeunit
 import gleeunit/should
 import simplifile
@@ -66,61 +69,63 @@ pub fn test_vectors_test() {
   results.1
   |> list.map(fn(e) { echo e })
 
+  echo "Number of errors: " <> string.inspect(list.length(results.1))
+
   Nil
 }
 
 fn run_test_vector(test_vector: TestVector) -> Result(Nil, TestVectorError) {
   // TODO we should move this to decode parse
-  let assert Ok(original_data) = bit_array.base64_decode(test_vector.cbor)
-  use #(cbor_decoded, rest) <- result.try(
-    decode.decode(original_data)
-    |> result.map_error(fn(e) { TestVectorError(error: e, test_vector:) }),
-  )
+  todo
+  //let assert Ok(original_data) = bit_array.base64_decode(test_vector.cbor)
+  //use #(cbor_decoded, rest) <- result.try(
+  //  decode.decode(original_data)
+  //  |> result.map_error(fn(e) { TestVectorError(error: e, test_vector:) }),
+  //)
 
-  assert rest == <<>>
+  //assert rest == <<>>
 
-  // TODO validate that theres either diagnostic or decoded
-  use _ <- result.try(case #(test_vector.decoded, test_vector.diagnostic) {
-    #(Some(_), Some(_)) -> {
-      panic as "Both decoded and diagnostic are present"
-    }
-    #(Some(decoded), None) -> {
-      assert decoded == cbor_decoded
-      Ok(Nil)
-    }
-    #(None, Some(diagnostic)) -> {
-      Error(UnfinishedTest(
-        info: "No diagnostic test vector support",
-        test_vector:,
-      ))
-    }
-    _ -> {
-      // TODO handle null or undefined case for decoded
-      Error(UnfinishedTest(info: "No decoded or diagnostic", test_vector:))
-    }
-  })
+  //use _ <- result.try(case #(test_vector.decoded, test_vector.diagnostic) {
+  //  #(Some(_), Some(_)) -> {
+  //    panic as "Both decoded and diagnostic are present"
+  //  }
+  //  #(Some(decoded), None) -> {
+  //    assert decoded == cbor_decoded
+  //    Ok(Nil)
+  //  }
+  //  #(None, Some(diagnostic)) -> {
+  //    Error(UnfinishedTest(
+  //      info: "No diagnostic test vector support",
+  //      test_vector:,
+  //    ))
+  //  }
+  //  _ -> {
+  //    // TODO handle null or undefined case for decoded
+  //    Error(UnfinishedTest(info: "No decoded or diagnostic", test_vector:))
+  //  }
+  //})
 
-  case test_vector.roundtrip {
-    True -> {
-      let assert Ok(decoded_from_dy) =
-        gdd.run(cbor_decoded, decode.cbor_decoder())
-      use re_encoded <- result.try(
-        encode.to_bit_array(decoded_from_dy)
-        |> result.map_error(fn(e) { EncodeError(error: e, test_vector:) }),
-      )
+  //case test_vector.roundtrip {
+  //  True -> {
+  //    let assert Ok(decoded_from_dy) =
+  //      gdd.run(cbor_decoded, decode.cbor_decoder())
+  //    use re_encoded <- result.try(
+  //      encode.to_bit_array(decoded_from_dy)
+  //      |> result.map_error(fn(e) { EncodeError(error: e, test_vector:) }),
+  //    )
 
-      case re_encoded == original_data {
-        True -> Ok(Nil)
-        False ->
-          Error(RoundtripError(
-            test_vector:,
-            expected: re_encoded,
-            actual: original_data,
-          ))
-      }
-    }
-    False -> Ok(Nil)
-  }
+  //    case re_encoded == original_data {
+  //      True -> Ok(Nil)
+  //      False ->
+  //        Error(RoundtripError(
+  //          test_vector:,
+  //          expected: re_encoded,
+  //          actual: original_data,
+  //        ))
+  //    }
+  //  }
+  //  False -> Ok(Nil)
+  //}
 }
 
 // Manual test vectors
@@ -183,8 +188,9 @@ pub fn encode_and_decode_test_d() {
       alive: True,
       password: bit_array.from_string("cheese"),
     )
-  let assert Ok(Ok(_)) =
-    cat_encoder(cat)
-    |> encode.to_bit_array
-    |> result.map(fn(data) { decode.parse(data, using: cat_decoder) })
+  //let assert Ok(Ok(_)) =
+  //  cat_encoder(cat)
+  //  |> encode.to_bit_array
+  //  |> result.map(fn(data) { decode.parse(data, using: cat_decoder) })
+  todo
 }
