@@ -226,13 +226,26 @@ pub fn decode_bytes_helper(
   case data {
     <<24:5, n:int-unsigned-size(8), v:bytes-size(n), rest:bits>> ->
       Ok(#(v, rest))
+    <<25:5, n:int-unsigned-size(16), v:bytes-size(n), rest:bits>> ->
+      Ok(#(v, rest))
+    <<26:5, n:int-unsigned-size(32), v:bytes-size(n), rest:bits>> ->
+      Ok(#(v, rest))
+    <<27:5, n:int-unsigned-size(64), v:bytes-size(n), rest:bits>> ->
+      Ok(#(v, rest))
     <<n:int-size(5), v:bytes-size(n), rest:bits>> if n < 24 -> Ok(#(v, rest))
     <<31:5, _v:bits>> ->
       Error(UnimplementedError("Indeterminate sizes not supported yet."))
-    v ->
+    <<n:int-size(5), v:bits>> -> {
+      echo v
+      Error(UnimplementedError(
+        "For byte/strings, handling minor: " <> string.inspect(n),
+      ))
+    }
+    v -> {
       Error(UnimplementedError(
         "Didn't know how to handle bytes type from data: " <> string.inspect(v),
       ))
+    }
   }
 }
 
