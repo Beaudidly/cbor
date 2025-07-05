@@ -114,10 +114,10 @@ fn binary_encode(value: BinaryEncoding) -> Result(BitArray, EncodeError) {
 
   case length {
     v if v < 24 -> Ok(<<major:3, v:5, value:bits>>)
-    v if v < 0x100 -> Ok(<<major:3, 25:5, v:8, value:bits>>)
-    v if v < 0x10000 -> Ok(<<major:3, 26:5, v:16, value:bits>>)
-    v if v < 0x100000000 -> Ok(<<major:3, 27:5, v:32, value:bits>>)
-    v if v < 0x10000000000000000 -> Ok(<<major:3, 28:5, v:64, value:bits>>)
+    v if v < 0x100 -> Ok(<<major:3, 24:5, v:8, value:bits>>)
+    v if v < 0x10000 -> Ok(<<major:3, 25:5, v:16, value:bits>>)
+    v if v < 0x100000000 -> Ok(<<major:3, 26:5, v:32, value:bits>>)
+    v if v < 0x10000000000000000 -> Ok(<<major:3, 27:5, v:64, value:bits>>)
     _ -> Error(EncodeError("Binary length too large"))
   }
 }
