@@ -125,19 +125,15 @@ fn binary_encode(value: BinaryEncoding) -> Result(BitArray, EncodeError) {
 fn array_encode(value: List(CBOR)) -> Result(BitArray, EncodeError) {
   let length = list.length(value)
 
-  //let data =
-  //  list.try_map(value, to_bit_array)
-  //  |> result.try(bit_array.concat)
-  //  |> Ok
   use data <- result.try(list.try_map(value, to_bit_array))
   let data = bit_array.concat(data)
 
   case length {
     v if v < 24 -> Ok(<<4:3, v:5, data:bits>>)
-    v if v < 0x100 -> Ok(<<4:3, 25:5, v:8, data:bits>>)
-    v if v < 0x10000 -> Ok(<<4:3, 26:5, v:16, data:bits>>)
-    v if v < 0x100000000 -> Ok(<<4:3, 27:5, v:32, data:bits>>)
-    v if v < 0x10000000000000000 -> Ok(<<4:3, 28:5, v:64, data:bits>>)
+    v if v < 0x100 -> Ok(<<4:3, 24:5, v:8, data:bits>>)
+    v if v < 0x10000 -> Ok(<<4:3, 25:5, v:16, data:bits>>)
+    v if v < 0x100000000 -> Ok(<<4:3, 26:5, v:32, data:bits>>)
+    v if v < 0x10000000000000000 -> Ok(<<4:3, 27:5, v:64, data:bits>>)
     _ -> Error(EncodeError("Array length too large"))
   }
 }
