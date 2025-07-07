@@ -1,3 +1,4 @@
+import experiment/erl_decode
 import gbor.{type CBOR}
 import gleam/bit_array
 import gleam/dict
@@ -68,6 +69,7 @@ pub fn decode(data: BitArray) -> Result(#(Dynamic, BitArray), CborDecodeError) {
     <<3:3, rest:bits>> -> decode_string(rest)
     <<4:3, rest:bits>> -> decode_array(rest)
     <<5:3, rest:bits>> -> decode_map(rest)
+    <<6:3, rest:bits>> -> decode_tag(rest)
     <<7:3, rest:bits>> -> decode_float_or_simple_value(rest)
     <<n:3, _:bits>> -> Error(MajorTypeError(n))
     <<>> -> {
@@ -332,4 +334,17 @@ pub fn decode_map(
   use map <- result.try(map)
 
   Ok(#(map, rest))
+}
+
+pub fn decode_tag(
+  data: BitArray,
+) -> Result(#(Dynamic, BitArray), CborDecodeError) {
+  use #(tag, rest) <- result.try(case data {
+    <<0:5, rest:bits>> -> Ok(#(0, rest))
+    _ -> Error(UnimplementedError("This tag is not implemented yet."))
+  })
+
+  use #(value, rest) <- result.try(decode(rest))
+
+  Ok(#(erl_decode.tag(tag, value), rest))
 }

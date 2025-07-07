@@ -1,4 +1,5 @@
 import decode.{decode}
+import experiment/erl_decode
 import gbor
 import gleam/bit_array
 import gleam/dynamic
@@ -43,4 +44,21 @@ pub fn decode_array_test() {
 
 pub fn decode_cbor_test() {
   assert Ok(gbor.Null) == gdd.run(dynamic.nil(), decode.cbor_decoder())
+}
+
+pub fn decode_tag_test() {
+  let assert Ok(data) =
+    bit_array.base16_decode("c074323031332d30332d32315432303a30343a30305a")
+
+  let assert Ok(#(dy, _)) = decode.decode(data)
+
+  let decoder = erl_decode.tag_decoder(0)
+  let bad_decoder = erl_decode.tag_decoder(1)
+
+  let assert Ok(tag_value) = gdd.run(dy, decoder)
+  let assert Error(_) = gdd.run(dy, bad_decoder)
+  echo tag_value
+
+  let assert Ok(tag_value_string) = gdd.run(tag_value, gdd.string)
+  echo tag_value_string
 }
