@@ -1,7 +1,6 @@
 import gbor.{type CBOR}
 import gleam/bit_array
-import gleam/dict
-import gleam/dynamic.{type Dynamic}
+import gleam/dynamic
 import gleam/dynamic/decode as gdd
 import gleam/list
 import gleam/result
