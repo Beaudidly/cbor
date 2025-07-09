@@ -1,6 +1,6 @@
-import decode
-import encode
 import gbor.{type CBOR, Int, Map, Null, String}
+import gbor/decode
+import gbor/encode
 import gleam/bit_array
 import gleeunit
 
