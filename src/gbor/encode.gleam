@@ -1,63 +1,65 @@
-import gbor.{type CBOR}
 import gleam/bit_array
 import gleam/list
 import gleam/result
 import gleam/string
-import ieee_float
+
+import ieee_float as i
+
+import gbor as g
 
 pub type EncodeError {
   EncodeError(String)
 }
 
-pub fn int(value: Int) -> CBOR {
-  gbor.Int(value)
+pub fn int(value: Int) -> g.CBOR {
+  g.CBInt(value)
 }
 
-pub fn map(value: List(#(CBOR, CBOR))) -> CBOR {
-  gbor.Map(value)
+pub fn map(value: List(#(g.CBOR, g.CBOR))) -> g.CBOR {
+  g.CBMap(value)
 }
 
-pub fn string(value: String) -> CBOR {
-  gbor.String(value)
+pub fn string(value: String) -> g.CBOR {
+  g.CBString(value)
 }
 
-pub fn array(value: List(CBOR)) -> CBOR {
-  gbor.Array(value)
+pub fn array(value: List(g.CBOR)) -> g.CBOR {
+  g.CBArray(value)
 }
 
-pub fn bool(value: Bool) -> CBOR {
-  gbor.Bool(value)
+pub fn bool(value: Bool) -> g.CBOR {
+  g.CBBool(value)
 }
 
-pub fn null() -> CBOR {
-  gbor.Null
+pub fn null() -> g.CBOR {
+  g.CBNull
 }
 
-pub fn undefined() -> CBOR {
-  gbor.Undefined
+pub fn undefined() -> g.CBOR {
+  g.CBUndefined
 }
 
-pub fn float(value: Float) -> CBOR {
-  gbor.Float(value)
+pub fn float(value: Float) -> g.CBOR {
+  g.CBFloat(value)
 }
 
-pub fn binary(value: BitArray) -> CBOR {
-  gbor.Binary(value)
+pub fn binary(value: BitArray) -> g.CBOR {
+  g.CBBinary(value)
 }
 
-pub fn to_bit_array(value: CBOR) -> Result(BitArray, EncodeError) {
+pub fn to_bit_array(value: g.CBOR) -> Result(BitArray, EncodeError) {
   case value {
-    gbor.Int(v) if v >= 0 -> uint_encode(v)
-    gbor.Int(v) if v < 0 -> int_encode(v)
-    gbor.Float(v) -> Ok(float_encode(v))
-    gbor.Binary(v) -> binary_encode(BinaryEncoding(v))
-    gbor.String(v) -> binary_encode(StringEncoding(v))
-    gbor.Array(v) -> array_encode(v)
-    gbor.Map(v) -> map_encode(v)
-    gbor.Bool(v) -> Ok(bool_encode(v))
-    gbor.Tagged(t, v) -> tagged_encode(t, v)
-    gbor.Null -> Ok(null_encode())
-    gbor.Undefined -> Ok(undefined_encode())
+    g.CBInt(v) if v >= 0 -> uint_encode(v)
+    g.CBInt(v) if v < 0 -> int_encode(v)
+    g.CBFloat(v) -> Ok(float_encode(v))
+    g.CBBinary(v) -> binary_encode(BinaryEncoding(v))
+    g.CBString(v) -> binary_encode(StringEncoding(v))
+    g.CBArray(v) -> array_encode(v)
+    g.CBMap(v) -> map_encode(v)
+    g.CBBool(v) -> Ok(bool_encode(v))
+    g.CBTagged(t, v) -> tagged_encode(t, v)
+    g.CBNull -> Ok(null_encode())
+    g.CBUndefined -> Ok(undefined_encode())
     v -> {
       Error(EncodeError("Unknown CBOR value: " <> string.inspect(v)))
     }
@@ -92,8 +94,8 @@ pub fn int_encode(value: Int) -> Result(BitArray, EncodeError) {
 fn float_encode(value: Float) -> BitArray {
   let bytes =
     value
-    |> ieee_float.finite
-    |> ieee_float.to_bytes_64_be
+    |> i.finite
+    |> i.to_bytes_64_be
 
   <<7:3, 27:5, bytes:bits>>
 }
@@ -123,7 +125,7 @@ fn binary_encode(value: BinaryEncoding) -> Result(BitArray, EncodeError) {
   }
 }
 
-fn array_encode(value: List(CBOR)) -> Result(BitArray, EncodeError) {
+fn array_encode(value: List(g.CBOR)) -> Result(BitArray, EncodeError) {
   let length = list.length(value)
 
   use data <- result.try(list.try_map(value, to_bit_array))
@@ -154,7 +156,7 @@ fn undefined_encode() -> BitArray {
   <<0xf7>>
 }
 
-fn map_encode(value: List(#(CBOR, CBOR))) -> Result(BitArray, EncodeError) {
+fn map_encode(value: List(#(g.CBOR, g.CBOR))) -> Result(BitArray, EncodeError) {
   let n_pairs = list.length(value)
 
   use data <- result.try(
@@ -185,7 +187,7 @@ fn map_encode(value: List(#(CBOR, CBOR))) -> Result(BitArray, EncodeError) {
   }
 }
 
-fn tagged_encode(t: Int, v: CBOR) -> Result(BitArray, EncodeError) {
+fn tagged_encode(t: Int, v: g.CBOR) -> Result(BitArray, EncodeError) {
   use bin_tag <- result.try(case t {
     t if t < 24 -> Ok(<<6:3, t:5>>)
     t if t < 0x100 -> Ok(<<6:3, 24:5, t:8>>)
