@@ -8,4 +8,5 @@ pub type CBOR {
   Null
   Undefined
   Binary(BitArray)
+  Tagged(Int, CBOR)
 }

@@ -26,6 +26,7 @@ pub fn decode(data: BitArray) -> Result(#(CBOR, BitArray), CborDecodeError) {
     <<3:3, min:5, rest:bits>> -> decode_string(min, rest)
     <<4:3, min:5, rest:bits>> -> decode_array(min, rest)
     <<5:3, min:5, rest:bits>> -> decode_map(min, rest)
+    <<6:3, min:5, rest:bits>> -> decode_tagged(min, rest)
     <<7:3, min:5, rest:bits>> -> decode_float_or_simple_value(min, rest)
     <<n:3, _:bits>> -> Error(MajorTypeError(n))
     <<>> -> {
@@ -290,4 +291,28 @@ pub fn decode_map(
   use map <- result.try(map)
 
   Ok(#(map, rest))
+}
+
+pub fn decode_tagged(
+  min: Int,
+  data: BitArray,
+) -> Result(#(CBOR, BitArray), CborDecodeError) {
+  use #(tag_num, rest) <- result.try(case min, data {
+    24, <<val:int-unsigned-size(8), rest:bits>> -> Ok(#(val, rest))
+    25, <<val:int-unsigned-size(16), rest:bits>> -> Ok(#(val, rest))
+    26, <<val:int-unsigned-size(32), rest:bits>> -> Ok(#(val, rest))
+    27, <<val:int-unsigned-size(64), rest:bits>> -> Ok(#(val, rest))
+    min, <<rest:bits>> if min <= 23 -> Ok(#(min, rest))
+    min, <<_rest:bits>> if 30 >= min && min >= 28 -> Error(ReservedError)
+    min, v -> {
+      let err = "Did not find a valid uint, min: " <> string.inspect(min)
+      gdd.decode_error(expected: err, found: dynamic.bit_array(v))
+      |> DynamicDecodeError
+      |> Error
+    }
+  })
+
+  use #(tag_value, rest) <- result.try(decode(rest))
+
+  Ok(#(gbor.Tagged(tag_num, tag_value), rest))
 }
