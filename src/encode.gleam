@@ -55,6 +55,7 @@ pub fn to_bit_array(value: CBOR) -> Result(BitArray, EncodeError) {
     gbor.Array(v) -> array_encode(v)
     gbor.Map(v) -> map_encode(v)
     gbor.Bool(v) -> Ok(bool_encode(v))
+    gbor.Tagged(t, v) -> tagged_encode(t, v)
     gbor.Null -> Ok(null_encode())
     gbor.Undefined -> Ok(undefined_encode())
     v -> {
@@ -160,8 +161,7 @@ fn map_encode(value: List(#(CBOR, CBOR))) -> Result(BitArray, EncodeError) {
     list.try_fold(value, <<>>, fn(acc, a) {
       use k_data <- result.try(to_bit_array(a.0))
       use v_data <- result.try(to_bit_array(a.1))
-      //Ok(bit_array.concat([k_data, v_data, acc]))
-      Ok(bit_array.concat([acc, v_data, k_data]))
+      Ok(bit_array.concat([acc, k_data, v_data]))
     }),
   )
 
@@ -183,4 +183,19 @@ fn map_encode(value: List(#(CBOR, CBOR))) -> Result(BitArray, EncodeError) {
     v if v < 0x10000000000000000 -> Ok(<<5:3, 28:5, v:64, data:bits>>)
     _ -> Error(EncodeError("N pairs size too large"))
   }
+}
+
+fn tagged_encode(t: Int, v: CBOR) -> Result(BitArray, EncodeError) {
+  use bin_tag <- result.try(case t {
+    t if t < 24 -> Ok(<<6:3, t:5>>)
+    t if t < 0x100 -> Ok(<<6:3, 24:5, t:8>>)
+    t if t < 0x10000 -> Ok(<<6:3, 25:5, t:16>>)
+    t if t < 0x100000000 -> Ok(<<6:3, 26:5, t:32>>)
+    t if t < 0x10000000000000000 -> Ok(<<6:3, 27:5, t:64>>)
+    _ -> Error(EncodeError("Tagged tag too large"))
+  })
+
+  use bin_value <- result.try(to_bit_array(v))
+
+  Ok(bit_array.concat([bin_tag, bin_value]))
 }

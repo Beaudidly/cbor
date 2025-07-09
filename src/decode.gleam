@@ -1,7 +1,6 @@
 import gbor.{type CBOR}
 import gleam/bit_array
-import gleam/dict
-import gleam/dynamic.{type Dynamic}
+import gleam/dynamic
 import gleam/dynamic/decode as gdd
 import gleam/list
 import gleam/result
@@ -18,57 +17,16 @@ pub type CborDecodeError {
   UnassignedError
 }
 
-pub fn parse(
-  from bin: BitArray,
-  using decoder: gdd.Decoder(t),
-) -> Result(t, CborDecodeError) {
-  use dy <- result.try(case decode(bin) {
-    Ok(#(dy_value, <<>>)) -> Ok(dy_value)
-    Ok(#(_, rest)) -> {
-      gdd.decode_error(
-        expected: "Expected no more data, but got more",
-        found: dynamic.bit_array(rest),
-      )
-      |> DynamicDecodeError
-      |> Error
-    }
-    Error(e) -> Error(e)
-  })
-
-  gdd.run(dy, decoder)
-  |> result.map_error(fn(e) { DynamicDecodeError(e) })
-}
-
-pub fn cbor_decoder() -> gdd.Decoder(CBOR) {
-  use <- gdd.recursive
-  gdd.one_of(gdd.map(gdd.int, gbor.Int), [
-    gdd.map(gdd.float, gbor.Float),
-    gdd.map(gdd.string, gbor.String),
-    gdd.map(gdd.list(cbor_decoder()), fn(v) { gbor.Array(v) }),
-    gdd.map(gdd.bool, gbor.Bool),
-    gdd.map(gdd.bit_array, gbor.Binary),
-    gdd.map(gdd.dict(cbor_decoder(), cbor_decoder()), fn(v) {
-      gbor.Map(dict.to_list(v))
-    }),
-    gdd.map(gdd.dynamic, fn(a) {
-      let dnil = dynamic.nil()
-      case a {
-        _nil if a == dnil -> gbor.Null
-        _ -> gbor.Undefined
-      }
-    }),
-  ])
-}
-
-pub fn decode(data: BitArray) -> Result(#(Dynamic, BitArray), CborDecodeError) {
+pub fn decode(data: BitArray) -> Result(#(CBOR, BitArray), CborDecodeError) {
   case data {
-    <<0:3, rest:bits>> -> decode_uint(rest)
-    <<1:3, rest:bits>> -> decode_int(rest)
-    <<2:3, rest:bits>> -> decode_bytes(rest)
-    <<3:3, rest:bits>> -> decode_string(rest)
-    <<4:3, rest:bits>> -> decode_array(rest)
-    <<5:3, rest:bits>> -> decode_map(rest)
-    <<7:3, rest:bits>> -> decode_float_or_simple_value(rest)
+    <<0:3, min:5, rest:bits>> -> decode_uint(min, rest)
+    <<1:3, min:5, rest:bits>> -> decode_int(min, rest)
+    <<2:3, min:5, rest:bits>> -> decode_bytes(min, rest)
+    <<3:3, min:5, rest:bits>> -> decode_string(min, rest)
+    <<4:3, min:5, rest:bits>> -> decode_array(min, rest)
+    <<5:3, min:5, rest:bits>> -> decode_map(min, rest)
+    <<6:3, min:5, rest:bits>> -> decode_tagged(min, rest)
+    <<7:3, min:5, rest:bits>> -> decode_float_or_simple_value(min, rest)
     <<n:3, _:bits>> -> Error(MajorTypeError(n))
     <<>> -> {
       Error(
@@ -86,24 +44,20 @@ pub fn decode(data: BitArray) -> Result(#(Dynamic, BitArray), CborDecodeError) {
   }
 }
 
-fn decode_uint(data: BitArray) -> Result(#(Dynamic, BitArray), CborDecodeError) {
-  case data {
-    <<24:5, val:int-unsigned-size(8), rest:bits>> ->
-      Ok(#(dynamic.int(val), rest))
-    <<25:5, val:int-unsigned-size(16), rest:bits>> ->
-      Ok(#(dynamic.int(val), rest))
-    <<26:5, val:int-unsigned-size(32), rest:bits>> ->
-      Ok(#(dynamic.int(val), rest))
-    <<27:5, val:int-unsigned-size(64), rest:bits>> ->
-      Ok(#(dynamic.int(val), rest))
-    <<val:int-size(5), rest:bits>> if val <= 23 -> Ok(#(dynamic.int(val), rest))
-    <<val:int-size(5), _:bits>> if 30 >= val && val >= 28 ->
-      Error(ReservedError)
-    v -> {
-      gdd.decode_error(
-        expected: "Did not find a valid uint",
-        found: dynamic.bit_array(v),
-      )
+fn decode_uint(
+  min: Int,
+  data: BitArray,
+) -> Result(#(CBOR, BitArray), CborDecodeError) {
+  case min, data {
+    24, <<val:int-unsigned-size(8), rest:bits>> -> Ok(#(gbor.Int(val), rest))
+    25, <<val:int-unsigned-size(16), rest:bits>> -> Ok(#(gbor.Int(val), rest))
+    26, <<val:int-unsigned-size(32), rest:bits>> -> Ok(#(gbor.Int(val), rest))
+    27, <<val:int-unsigned-size(64), rest:bits>> -> Ok(#(gbor.Int(val), rest))
+    min, <<rest:bits>> if min <= 23 -> Ok(#(gbor.Int(min), rest))
+    min, <<_rest:bits>> if 30 >= min && min >= 28 -> Error(ReservedError)
+    min, v -> {
+      let err = "Did not find a valid uint, min: " <> string.inspect(min)
+      gdd.decode_error(expected: err, found: dynamic.bit_array(v))
       |> DynamicDecodeError
       |> Error
     }
@@ -111,52 +65,49 @@ fn decode_uint(data: BitArray) -> Result(#(Dynamic, BitArray), CborDecodeError) 
 }
 
 pub fn decode_int(
+  min: Int,
   data: BitArray,
-) -> Result(#(Dynamic, BitArray), CborDecodeError) {
-  use #(v, rest) <- result.try(case data {
-    <<24:5, val:int-size(8), rest:bits>> -> Ok(#(val, rest))
-    <<25:5, val:int-size(16), rest:bits>> -> Ok(#(val, rest))
-    <<26:5, val:int-size(32), rest:bits>> -> Ok(#(val, rest))
-    <<27:5, val:int-size(64), rest:bits>> -> Ok(#(val, rest))
-    <<val:int-size(5), rest:bits>> if val < 24 -> Ok(#(val, rest))
-    <<val:int-size(5), _:bits>> if 30 >= val && val >= 28 ->
-      Error(ReservedError)
-    v -> {
-      gdd.decode_error(
-        expected: "Did not find a valid int",
-        found: dynamic.bit_array(v),
-      )
+) -> Result(#(CBOR, BitArray), CborDecodeError) {
+  use #(v, rest) <- result.try(case min, data {
+    24, <<val:int-size(8), rest:bits>> -> Ok(#(val, rest))
+    25, <<val:int-size(16), rest:bits>> -> Ok(#(val, rest))
+    26, <<val:int-size(32), rest:bits>> -> Ok(#(val, rest))
+    27, <<val:int-size(64), rest:bits>> -> Ok(#(val, rest))
+    val, <<rest:bits>> if val < 24 -> Ok(#(val, rest))
+    val, <<_:bits>> if 30 >= val && val >= 28 -> Error(ReservedError)
+    val, v -> {
+      let err = "Did not find a valid int, min: " <> string.inspect(val)
+      gdd.decode_error(expected: err, found: dynamic.bit_array(v))
       |> DynamicDecodeError
       |> Error
     }
   })
 
-  Ok(#(dynamic.int(-1 - v), rest))
+  Ok(#(gbor.Int(-1 - v), rest))
 }
 
 pub fn decode_float_or_simple_value(
+  min: Int,
   data: BitArray,
-) -> Result(#(Dynamic, BitArray), CborDecodeError) {
-  case data {
-    <<20:5, rest:bits>> -> Ok(#(dynamic.bool(False), rest))
-    <<21:5, rest:bits>> -> Ok(#(dynamic.bool(True), rest))
-    <<22:5, rest:bits>> -> Ok(#(dynamic.nil(), rest))
+) -> Result(#(CBOR, BitArray), CborDecodeError) {
+  case min, data {
+    20, <<rest:bits>> -> Ok(#(gbor.Bool(False), rest))
+    21, <<rest:bits>> -> Ok(#(gbor.Bool(True), rest))
+    22, <<rest:bits>> -> Ok(#(gbor.Null, rest))
     // Undefined, TODO can we make a specific type for this?
-    <<23:5, rest:bits>> -> Ok(#(dynamic.nil(), rest))
-    <<25:5, v:bytes-size(2), rest:bits>> -> decode_float(v, rest)
-    <<26:5, v:bytes-size(4), rest:bits>> -> decode_float(v, rest)
-    <<27:5, v:bytes-size(8), rest:bits>> -> decode_float(v, rest)
+    23, <<rest:bits>> -> Ok(#(gbor.Undefined, rest))
+    25, <<v:bytes-size(2), rest:bits>> -> decode_float(v, rest)
+    26, <<v:bytes-size(4), rest:bits>> -> decode_float(v, rest)
+    27, <<v:bytes-size(8), rest:bits>> -> decode_float(v, rest)
     // Unassigned
-    <<n:int-size(5), _:bytes-size(n), _:bits>> if n <= 19 ->
-      Error(UnassignedError)
+    n, <<_v:bytes-size(min), _:bits>> if n <= 19 -> Error(UnassignedError)
     // Reserved
-    <<n:int-size(5), _:bits>> if n >= 24 && n <= 31 -> Error(ReservedError)
-    <<n:int-size(5), _:bits>> if n >= 32 -> Error(UnassignedError)
-    v -> {
-      gdd.decode_error(
-        expected: "Did not find a valid float or simple value",
-        found: dynamic.bit_array(v),
-      )
+    n, <<_rest:bits>> if n >= 24 && n <= 31 -> Error(ReservedError)
+    n, <<_rest:bits>> if n >= 32 -> Error(UnassignedError)
+    n, v -> {
+      let err =
+        "Did not find a valid float or simple value, min: " <> string.inspect(n)
+      gdd.decode_error(expected: err, found: dynamic.bit_array(v))
       |> DynamicDecodeError
       |> Error
     }
@@ -166,7 +117,7 @@ pub fn decode_float_or_simple_value(
 pub fn decode_float(
   data: BitArray,
   rest: BitArray,
-) -> Result(#(Dynamic, BitArray), CborDecodeError) {
+) -> Result(#(CBOR, BitArray), CborDecodeError) {
   use v <- result.try(case bit_array.bit_size(data) {
     16 -> Ok(from_bytes_16_be(data))
     32 -> Ok(from_bytes_32_be(data))
@@ -182,7 +133,7 @@ pub fn decode_float(
   })
 
   case to_finite(v) {
-    Ok(v) -> Ok(#(dynamic.float(v), rest))
+    Ok(v) -> Ok(#(gbor.Float(v), rest))
     Error(_) -> {
       gdd.decode_error(
         expected: "Valid float, but got NaN/Inf",
@@ -195,20 +146,22 @@ pub fn decode_float(
 }
 
 pub fn decode_bytes(
+  min: Int,
   data: BitArray,
-) -> Result(#(Dynamic, BitArray), CborDecodeError) {
-  use #(v, rest) <- result.try(decode_bytes_helper(data))
-  Ok(#(dynamic.bit_array(v), rest))
+) -> Result(#(CBOR, BitArray), CborDecodeError) {
+  use #(v, rest) <- result.try(decode_bytes_helper(min, data))
+  Ok(#(gbor.Binary(v), rest))
 }
 
 pub fn decode_string(
+  min: Int,
   data: BitArray,
-) -> Result(#(Dynamic, BitArray), CborDecodeError) {
-  use #(v, rest) <- result.try(decode_bytes_helper(data))
+) -> Result(#(CBOR, BitArray), CborDecodeError) {
+  use #(v, rest) <- result.try(decode_bytes_helper(min, data))
 
   let v =
     bit_array.to_string(v)
-    |> result.map(fn(s) { dynamic.string(s) })
+    |> result.map(fn(s) { gbor.String(s) })
     |> result.map_error(fn(_) {
       DynamicDecodeError(gdd.decode_error(
         expected: "Expected a string",
@@ -221,64 +174,64 @@ pub fn decode_string(
 }
 
 pub fn decode_bytes_helper(
+  min: Int,
   data: BitArray,
 ) -> Result(#(BitArray, BitArray), CborDecodeError) {
-  case data {
-    <<24:5, n:int-unsigned-size(8), v:bytes-size(n), rest:bits>> ->
+  case min, data {
+    24, <<n:int-unsigned-size(8), v:bytes-size(n), rest:bits>> -> Ok(#(v, rest))
+    25, <<n:int-unsigned-size(16), v:bytes-size(n), rest:bits>> ->
       Ok(#(v, rest))
-    <<25:5, n:int-unsigned-size(16), v:bytes-size(n), rest:bits>> ->
+    26, <<n:int-unsigned-size(32), v:bytes-size(n), rest:bits>> ->
       Ok(#(v, rest))
-    <<26:5, n:int-unsigned-size(32), v:bytes-size(n), rest:bits>> ->
+    27, <<n:int-unsigned-size(64), v:bytes-size(n), rest:bits>> ->
       Ok(#(v, rest))
-    <<27:5, n:int-unsigned-size(64), v:bytes-size(n), rest:bits>> ->
-      Ok(#(v, rest))
-    <<n:int-size(5), v:bytes-size(n), rest:bits>> if n < 24 -> Ok(#(v, rest))
-    <<31:5, _v:bits>> ->
+    n, <<v:bytes-size(min), rest:bits>> if n < 24 -> Ok(#(v, rest))
+    31, <<_v:bits>> ->
       Error(UnimplementedError("Indeterminate sizes not supported yet."))
-    <<n:int-size(5), v:bits>> -> {
-      echo v
-      Error(UnimplementedError(
-        "For byte/strings, handling minor: " <> string.inspect(n),
-      ))
-    }
-    v -> {
-      Error(UnimplementedError(
-        "Didn't know how to handle bytes type from data: " <> string.inspect(v),
-      ))
+    n, v -> {
+      let err = "For byte/strings, handling minor: " <> string.inspect(n)
+      gdd.decode_error(expected: err, found: dynamic.bit_array(v))
+      |> DynamicDecodeError
+      |> Error
     }
   }
 }
 
 pub fn decode_array(
+  min: Int,
   data: BitArray,
-) -> Result(#(Dynamic, BitArray), CborDecodeError) {
-  use #(n, rest) <- result.try(case data {
-    <<24:5, n:int-unsigned-size(8), rest:bits>> -> Ok(#(n, rest))
-    <<25:5, n:int-unsigned-size(16), rest:bits>> -> Ok(#(n, rest))
-    <<26:5, n:int-unsigned-size(32), rest:bits>> -> Ok(#(n, rest))
-    <<27:5, n:int-unsigned-size(64), rest:bits>> -> Ok(#(n, rest))
+) -> Result(#(CBOR, BitArray), CborDecodeError) {
+  use #(n, rest) <- result.try(case min, data {
+    24, <<n:int-unsigned-size(8), rest:bits>> -> Ok(#(n, rest))
+    25, <<n:int-unsigned-size(16), rest:bits>> -> Ok(#(n, rest))
+    26, <<n:int-unsigned-size(32), rest:bits>> -> Ok(#(n, rest))
+    27, <<n:int-unsigned-size(64), rest:bits>> -> Ok(#(n, rest))
     // TODO break limited
-    <<n:int-size(5), rest:bits>> if n < 24 -> Ok(#(n, rest))
-    <<31:5, _:bits>> ->
+    n, <<rest:bits>> if n < 24 -> Ok(#(n, rest))
+    31, <<_rest:bits>> ->
       Error(UnimplementedError("Indeterminate lengths not supported yet."))
-    v -> {
-      Error(UnimplementedError(
+    n, v -> {
+      let err =
         "Didn't know how to handle parsing an array from data: "
-        <> string.inspect(v),
-      ))
+        <> string.inspect(v)
+        <> " with min: "
+        <> string.inspect(n)
+      gdd.decode_error(expected: err, found: dynamic.bit_array(v))
+      |> DynamicDecodeError
+      |> Error
     }
   })
 
   use #(values, rest) <- result.try(decode_array_helper(rest, n, []))
 
-  Ok(#(dynamic.list(list.reverse(values)), rest))
+  Ok(#(gbor.Array(list.reverse(values)), rest))
 }
 
 pub fn decode_array_helper(
   data: BitArray,
   n: Int,
-  acc: List(Dynamic),
-) -> Result(#(List(Dynamic), BitArray), CborDecodeError) {
+  acc: List(CBOR),
+) -> Result(#(List(CBOR), BitArray), CborDecodeError) {
   case n {
     0 -> Ok(#(acc, data))
     _ -> {
@@ -289,22 +242,27 @@ pub fn decode_array_helper(
 }
 
 pub fn decode_map(
+  min: Int,
   data: BitArray,
-) -> Result(#(Dynamic, BitArray), CborDecodeError) {
-  use #(n, rest) <- result.try(case data {
-    <<24:5, n:int-unsigned-size(8), rest:bits>> -> Ok(#(n, rest))
-    <<25:5, n:int-unsigned-size(16), rest:bits>> -> Ok(#(n, rest))
-    <<26:5, n:int-unsigned-size(32), rest:bits>> -> Ok(#(n, rest))
-    <<27:5, n:int-unsigned-size(64), rest:bits>> -> Ok(#(n, rest))
+) -> Result(#(CBOR, BitArray), CborDecodeError) {
+  use #(n, rest) <- result.try(case min, data {
+    24, <<n:int-unsigned-size(8), rest:bits>> -> Ok(#(n, rest))
+    25, <<n:int-unsigned-size(16), rest:bits>> -> Ok(#(n, rest))
+    26, <<n:int-unsigned-size(32), rest:bits>> -> Ok(#(n, rest))
+    27, <<n:int-unsigned-size(64), rest:bits>> -> Ok(#(n, rest))
     // TODO break limited
-    <<n:int-size(5), rest:bits>> if n < 24 -> Ok(#(n, rest))
-    <<31:5, _:bits>> ->
+    n, <<rest:bits>> if n < 24 -> Ok(#(n, rest))
+    31, <<_rest:bits>> ->
       Error(UnimplementedError("Indeterminate lengths not supported yet."))
-    v -> {
-      Error(UnimplementedError(
+    n, v -> {
+      let err =
         "Didn't know how to handle parsing a map from data: "
-        <> string.inspect(v),
-      ))
+        <> string.inspect(v)
+        <> " with min: "
+        <> string.inspect(n)
+      gdd.decode_error(expected: err, found: dynamic.bit_array(v))
+      |> DynamicDecodeError
+      |> Error
     }
   })
 
@@ -318,18 +276,42 @@ pub fn decode_map(
       case x {
         [k, v] -> Ok(#(k, v))
         // TODO check if values are even
-        v -> {
+        _ -> {
           Error(
             DynamicDecodeError(gdd.decode_error(
               expected: "Expected even number of values",
-              found: dynamic.list(v),
+              found: dynamic.nil(),
             )),
           )
         }
       }
     })
-    |> result.map(dynamic.properties)
+    |> result.map(gbor.Map)
   use map <- result.try(map)
 
   Ok(#(map, rest))
+}
+
+pub fn decode_tagged(
+  min: Int,
+  data: BitArray,
+) -> Result(#(CBOR, BitArray), CborDecodeError) {
+  use #(tag_num, rest) <- result.try(case min, data {
+    24, <<val:int-unsigned-size(8), rest:bits>> -> Ok(#(val, rest))
+    25, <<val:int-unsigned-size(16), rest:bits>> -> Ok(#(val, rest))
+    26, <<val:int-unsigned-size(32), rest:bits>> -> Ok(#(val, rest))
+    27, <<val:int-unsigned-size(64), rest:bits>> -> Ok(#(val, rest))
+    min, <<rest:bits>> if min <= 23 -> Ok(#(min, rest))
+    min, <<_rest:bits>> if 30 >= min && min >= 28 -> Error(ReservedError)
+    min, v -> {
+      let err = "Did not find a valid uint, min: " <> string.inspect(min)
+      gdd.decode_error(expected: err, found: dynamic.bit_array(v))
+      |> DynamicDecodeError
+      |> Error
+    }
+  })
+
+  use #(tag_value, rest) <- result.try(decode(rest))
+
+  Ok(#(gbor.Tagged(tag_num, tag_value), rest))
 }
