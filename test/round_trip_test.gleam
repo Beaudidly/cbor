@@ -1,5 +1,8 @@
 import gleam/bit_array
+import gleam/bool
 import gleam/dynamic/decode as gdd
+import gleam/list
+import gleam/result
 import gleeunit
 
 import gbor as g
@@ -122,15 +125,68 @@ pub fn decode_dynamic_test() {
   let assert Ok(v) = gdd.run(dyn_val, decoder)
   echo v
   assert v == Cat("2013-03-21T20:04:00Z", "2013-03-21T20:04:00Z")
+}
 
-  let decoder = {
-    use name <- gdd.field("name", gdd.string)
-    use dob <- gdd.field("dob", d.tagged_decoder(1, gdd.string, "INVALID"))
-    gdd.success(Cat(name, dob))
+// TODO move elsewhere, equivalent of dynamic.field
+fn cbor_get_field(
+  field: String,
+  cbor: g.CBOR,
+  convert: fn(g.CBOR) -> Result(a, String),
+) {
+  use value <- result.try(case cbor {
+    g.CBMap(fields) -> {
+      case list.find(fields, fn(f) { f.0 == g.CBString(field) }) {
+        Ok(#(_, v)) -> Ok(v)
+        Error(_) -> Error("Field not found")
+      }
+    }
+    _ -> Error("Not a map")
+  })
+
+  convert(value)
+}
+
+fn convert_string(cbor: g.CBOR) {
+  case cbor {
+    g.CBString(v) -> Ok(v)
+    _ -> Error("Not a string")
+  }
+}
+
+fn convert_tagged(
+  expected_tag: Int,
+  value_converter: fn(g.CBOR) -> Result(a, String),
+) {
+  fn(g: g.CBOR) {
+    case g {
+      g.CBTagged(tag, value) -> {
+        use <- bool.guard(
+          when: tag != expected_tag,
+          return: Error("Invalid tag"),
+        )
+        value_converter(value)
+      }
+      _ -> Error("Not a tagged value")
+    }
+  }
+}
+
+pub fn decode_dynamicless_test() {
+  let cbor_val =
+    g.CBMap([
+      #(g.CBString("name"), g.CBString("2013-03-21T20:04:00Z")),
+      #(g.CBString("dob"), g.CBTagged(0, g.CBString("2013-03-21T20:04:00Z"))),
+    ])
+
+  let assert Ok(cat) = {
+    use name <- result.try(cbor_get_field("name", cbor_val, convert_string))
+    use dob <- result.try(cbor_get_field(
+      "dob",
+      cbor_val,
+      convert_tagged(0, convert_string),
+    ))
+    Ok(Cat(name, dob))
   }
 
-  let assert Error(v) = gdd.run(dyn_val, decoder)
-  echo v
-
-  Nil
+  assert cat == Cat("2013-03-21T20:04:00Z", "2013-03-21T20:04:00Z")
 }
