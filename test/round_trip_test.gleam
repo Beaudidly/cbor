@@ -1,4 +1,5 @@
 import gleam/bit_array
+import gleam/dynamic/decode as gdd
 import gleeunit
 
 import gbor as g
@@ -98,4 +99,38 @@ pub fn decode_taggded_test() {
   )
 
   round_trip(g.CBTagged(1, g.CBInt(1_363_896_240)), "c11a514b67b0")
+}
+
+type Cat {
+  Cat(name: String, dob: String)
+}
+
+pub fn decode_dynamic_test() {
+  let dyn_val =
+    g.CBMap([
+      #(g.CBString("name"), g.CBString("2013-03-21T20:04:00Z")),
+      #(g.CBString("dob"), g.CBTagged(0, g.CBString("2013-03-21T20:04:00Z"))),
+    ])
+    |> d.cbor_to_dynamic
+
+  let decoder = {
+    use name <- gdd.field("name", gdd.string)
+    use dob <- gdd.field("dob", d.tagged_decoder(0, gdd.string, "INVALID"))
+    gdd.success(Cat(name, dob))
+  }
+
+  let assert Ok(v) = gdd.run(dyn_val, decoder)
+  echo v
+  assert v == Cat("2013-03-21T20:04:00Z", "2013-03-21T20:04:00Z")
+
+  let decoder = {
+    use name <- gdd.field("name", gdd.string)
+    use dob <- gdd.field("dob", d.tagged_decoder(1, gdd.string, "INVALID"))
+    gdd.success(Cat(name, dob))
+  }
+
+  let assert Error(v) = gdd.run(dyn_val, decoder)
+  echo v
+
+  Nil
 }
