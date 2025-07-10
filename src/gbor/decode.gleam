@@ -1,5 +1,6 @@
 import gbor/ffi_gbor
 import gleam/bit_array
+import gleam/bool
 import gleam/dynamic
 import gleam/dynamic/decode as gdd
 import gleam/list
@@ -42,20 +43,14 @@ pub fn tagged_decoder(
   default: a,
 ) {
   gdd.new_primitive_decoder("Tagged", fn(data) {
-    let res = ffi_gbor.check_tagged(data)
+    use #(tag, value) <- result.try(
+      ffi_gbor.check_tagged(data)
+      |> result.map_error(fn(_) { default }),
+    )
 
-    let x = case res {
-      Ok(#(tag, value)) -> {
-        case tag == expected_tag {
-          True -> Ok(value)
-          False -> Error(default)
-        }
-      }
-      Error(_) -> Error(default)
-    }
-    use x <- result.try(x)
+    use <- bool.guard(when: tag != expected_tag, return: Error(default))
 
-    gdd.run(x, value_decoder)
+    gdd.run(value, value_decoder)
     |> result.map_error(fn(_) { default })
   })
 }

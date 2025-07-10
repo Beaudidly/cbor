@@ -1,7 +1,5 @@
 import gleam/dynamic
 
-import gbor as g
-
 @external(erlang, "erl_gbor", "to_tagged")
 pub fn to_tagged(tag: Int, value: dynamic.Dynamic) -> dynamic.Dynamic
 
