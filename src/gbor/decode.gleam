@@ -1,3 +1,4 @@
+import gbor/ffi_gbor
 import gleam/bit_array
 import gleam/dynamic
 import gleam/dynamic/decode as gdd
@@ -15,6 +16,48 @@ pub type CborDecodeError {
   ReservedError
   UnimplementedError(String)
   UnassignedError
+}
+
+pub fn cbor_to_dynamic(cbor: g.CBOR) -> dynamic.Dynamic {
+  case cbor {
+    g.CBInt(v) -> dynamic.int(v)
+    g.CBString(v) -> dynamic.string(v)
+    g.CBFloat(v) -> dynamic.float(v)
+    g.CBMap(v) ->
+      dynamic.properties(
+        list.map(v, fn(v) { #(cbor_to_dynamic(v.0), cbor_to_dynamic(v.1)) }),
+      )
+    g.CBArray(v) -> dynamic.array(list.map(v, cbor_to_dynamic))
+    g.CBBool(v) -> dynamic.bool(v)
+    g.CBNull -> dynamic.nil()
+    g.CBUndefined -> dynamic.nil()
+    g.CBBinary(v) -> dynamic.bit_array(v)
+    g.CBTagged(tag, value) -> ffi_gbor.to_tagged(tag, cbor_to_dynamic(value))
+  }
+}
+
+pub fn tagged_decoder(
+  expected_tag: Int,
+  value_decoder: gdd.Decoder(a),
+  default: a,
+) {
+  gdd.new_primitive_decoder("Tagged", fn(data) {
+    let res = ffi_gbor.check_tagged(data)
+
+    let x = case res {
+      Ok(#(tag, value)) -> {
+        case tag == expected_tag {
+          True -> Ok(value)
+          False -> Error(default)
+        }
+      }
+      Error(_) -> Error(default)
+    }
+    use x <- result.try(x)
+
+    gdd.run(x, value_decoder)
+    |> result.map_error(fn(_) { default })
+  })
 }
 
 pub fn decode(data: BitArray) -> Result(#(g.CBOR, BitArray), CborDecodeError) {
