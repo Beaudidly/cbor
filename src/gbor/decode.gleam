@@ -1,4 +1,3 @@
-import gbor/ffi_gbor
 import gleam/bit_array
 import gleam/bool
 import gleam/dynamic
@@ -33,7 +32,7 @@ pub fn cbor_to_dynamic(cbor: g.CBOR) -> dynamic.Dynamic {
     g.CBNull -> dynamic.nil()
     g.CBUndefined -> dynamic.nil()
     g.CBBinary(v) -> dynamic.bit_array(v)
-    g.CBTagged(tag, value) -> ffi_gbor.to_tagged(tag, cbor_to_dynamic(value))
+    g.CBTagged(tag, value) -> ffi_to_tagged(tag, cbor_to_dynamic(value))
   }
 }
 
@@ -44,7 +43,7 @@ pub fn tagged_decoder(
 ) {
   gdd.new_primitive_decoder("Tagged", fn(data) {
     use #(tag, value) <- result.try(
-      ffi_gbor.check_tagged(data)
+      ffi_check_tagged(data)
       |> result.map_error(fn(_) { default }),
     )
 
@@ -353,3 +352,11 @@ pub fn decode_tagged(
 
   Ok(#(g.CBTagged(tag_num, tag_value), rest))
 }
+
+@external(erlang, "erl_gbor", "to_tagged")
+pub fn ffi_to_tagged(tag: Int, value: dynamic.Dynamic) -> dynamic.Dynamic
+
+@external(erlang, "erl_gbor", "check_tagged")
+pub fn ffi_check_tagged(
+  tagged: dynamic.Dynamic,
+) -> Result(#(Int, dynamic.Dynamic), String)
