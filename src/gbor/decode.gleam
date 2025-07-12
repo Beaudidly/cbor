@@ -2,6 +2,8 @@ import gleam/bit_array
 import gleam/bool
 import gleam/dynamic
 import gleam/dynamic/decode as gdd
+import gleam/erlang/atom
+import gleam/int
 import gleam/list
 import gleam/result
 import gleam/string
@@ -38,20 +40,24 @@ pub fn cbor_to_dynamic(cbor: g.CBOR) -> dynamic.Dynamic {
 
 pub fn tagged_decoder(
   expected_tag: Int,
-  value_decoder: gdd.Decoder(a),
-  default: a,
-) {
-  gdd.new_primitive_decoder("Tagged", fn(data) {
-    use #(tag, value) <- result.try(
-      ffi_check_tagged(data)
-      |> result.map_error(fn(_) { default }),
-    )
+  decoder: gdd.Decoder(a),
+  zero: a,
+) -> gdd.Decoder(a) {
+  let error = gdd.failure(zero, "CBOR tagged value")
 
-    use <- bool.guard(when: tag != expected_tag, return: Error(default))
+  use cbor_tag <- gdd.field(0, atom.decoder())
+  use <- bool.guard(
+    cbor_tag != atom.create("cbor_tagged__"),
+    gdd.failure(zero, "CBOR tagged value"),
+  )
 
-    gdd.run(value, value_decoder)
-    |> result.map_error(fn(_) { default })
-  })
+  use tag <- gdd.field(1, gdd.int)
+  use <- bool.guard(
+    tag != expected_tag,
+    gdd.failure(zero, int.to_string(expected_tag)),
+  )
+
+  gdd.at([2], decoder)
 }
 
 pub fn decode(data: BitArray) -> Result(#(g.CBOR, BitArray), CborDecodeError) {
