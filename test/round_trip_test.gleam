@@ -109,12 +109,13 @@ type Cat {
 }
 
 pub fn decode_dynamic_test() {
-  let dyn_val =
-    g.CBMap([
-      #(g.CBString("name"), g.CBString("2013-03-21T20:04:00Z")),
-      #(g.CBString("dob"), g.CBTagged(0, g.CBString("2013-03-21T20:04:00Z"))),
-    ])
-    |> d.cbor_to_dynamic
+  let assert Ok(bin) =
+    bit_array.base16_decode(
+      "A2646E616D6574323031332D30332D32315432303A30343A30305A63646F62C074323031332D30332D32315432303A30343A30305A",
+    )
+
+  let assert Ok(#(cbor_val, <<>>)) = d.decode(bin)
+  let dyn_val = d.cbor_to_dynamic(cbor_val)
 
   let decoder = {
     use name <- gdd.field("name", gdd.string)
@@ -123,70 +124,8 @@ pub fn decode_dynamic_test() {
   }
 
   let assert Ok(v) = gdd.run(dyn_val, decoder)
-  echo v
   assert v == Cat("2013-03-21T20:04:00Z", "2013-03-21T20:04:00Z")
-}
 
-// TODO move elsewhere, equivalent of dynamic.field
-fn cbor_get_field(
-  field: String,
-  cbor: g.CBOR,
-  convert: fn(g.CBOR) -> Result(a, String),
-) {
-  use value <- result.try(case cbor {
-    g.CBMap(fields) -> {
-      case list.find(fields, fn(f) { f.0 == g.CBString(field) }) {
-        Ok(#(_, v)) -> Ok(v)
-        Error(_) -> Error("Field not found")
-      }
-    }
-    _ -> Error("Not a map")
-  })
-
-  convert(value)
-}
-
-fn convert_string(cbor: g.CBOR) {
-  case cbor {
-    g.CBString(v) -> Ok(v)
-    _ -> Error("Not a string")
-  }
-}
-
-fn convert_tagged(
-  expected_tag: Int,
-  value_converter: fn(g.CBOR) -> Result(a, String),
-) {
-  fn(g: g.CBOR) {
-    case g {
-      g.CBTagged(tag, value) -> {
-        use <- bool.guard(
-          when: tag != expected_tag,
-          return: Error("Invalid tag"),
-        )
-        value_converter(value)
-      }
-      _ -> Error("Not a tagged value")
-    }
-  }
-}
-
-pub fn decode_dynamicless_test() {
-  let cbor_val =
-    g.CBMap([
-      #(g.CBString("name"), g.CBString("2013-03-21T20:04:00Z")),
-      #(g.CBString("dob"), g.CBTagged(0, g.CBString("2013-03-21T20:04:00Z"))),
-    ])
-
-  let assert Ok(cat) = {
-    use name <- result.try(cbor_get_field("name", cbor_val, convert_string))
-    use dob <- result.try(cbor_get_field(
-      "dob",
-      cbor_val,
-      convert_tagged(0, convert_string),
-    ))
-    Ok(Cat(name, dob))
-  }
-
-  assert cat == Cat("2013-03-21T20:04:00Z", "2013-03-21T20:04:00Z")
+  let assert Ok(encoded) = e.to_bit_array(cbor_val)
+  assert encoded == bin
 }
