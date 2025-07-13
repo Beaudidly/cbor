@@ -1,8 +1,7 @@
 import gleam/bit_array
 import gleam/bool
 import gleam/dynamic/decode as gdd
-import gleam/list
-import gleam/result
+import gleam/string
 import gleeunit
 
 import gbor as g
@@ -27,18 +26,48 @@ pub fn decode_bool_test() {
 }
 
 pub fn decode_float_test() {
-  let assert Ok(#(v, <<>>)) = decode_hex("fa47c35000")
-  assert v == g.CBFloat(100_000.0)
+  //let assert Ok(_) = round_trip(g.CBFloat(0.0), "f90000")
+  //let assert Ok(_) = round_trip(g.CBFloat(-0.0), "f98000")
+  //let assert Ok(_) = round_trip(g.CBFloat(1.0), "f93c00")
+  let assert Ok(_) = round_trip(g.CBFloat(1.1), "fb3ff199999999999a")
+  //let assert Ok(_) = round_trip(g.CBFloat(1.5), "f93e00")
+  //let assert Ok(_) = round_trip(g.CBFloat(65_504.0), "f97bff")
+  //let assert Ok(_) = round_trip(g.CBFloat(3.4028234663852886e38), "fa7f7fffff")
+  let assert Ok(_) = round_trip(g.CBFloat(1.0e300), "fb7e37e43c8800759c")
+  //let assert Ok(_) = round_trip(g.CBFloat(5.960464477539063e-08), "f90001")
+  //let assert Ok(_) = round_trip(g.CBFloat(6.103515625e-05), "f90400")
+  //let assert Ok(_) = round_trip(g.CBFloat(-4.0), "f9c400")
+  //let assert Ok(_) = round_trip(g.CBFloat(-4.1), "fbc010666666666666")
+  //let assert Ok(_) = round_trip(g.CBFloat(Infinity), "f97c00")
+  //let assert Ok(_) = round_trip(g.CBFloat(-Infinity), "f9fc00")
+  //let assert Ok(_) = round_trip(g.CBFloat(NaN), "f97e00")
+  //let assert Ok(_) = round_trip(g.CBFloat(-NaN), "f9fe00")
 }
 
 pub fn decode_uint_test() {
-  let assert Ok(#(v, <<>>)) = decode_hex("1bffffffffffffffff")
-  assert v == g.CBInt(18_446_744_073_709_551_615)
+  let assert Ok(_) = round_trip(g.CBInt(0), "00")
+  let assert Ok(_) = round_trip(g.CBInt(1), "01")
+  let assert Ok(_) = round_trip(g.CBInt(10), "0a")
+  let assert Ok(_) = round_trip(g.CBInt(23), "17")
+  let assert Ok(_) = round_trip(g.CBInt(24), "1818")
+  let assert Ok(_) = round_trip(g.CBInt(25), "1819")
+  let assert Ok(_) = round_trip(g.CBInt(100), "1864")
+  let assert Ok(_) = round_trip(g.CBInt(1000), "1903e8")
+  let assert Ok(_) = round_trip(g.CBInt(1_000_000), "1a000f4240")
+  let assert Ok(_) =
+    round_trip(g.CBInt(1_000_000_000_000), "1b000000e8d4a51000")
+  let assert Ok(_) =
+    round_trip(g.CBInt(18_446_744_073_709_551_615), "1bffffffffffffffff")
 }
 
 pub fn decode_int_test() {
-  let assert Ok(#(v, <<>>)) = decode_hex("3903e7")
-  assert v == g.CBInt(-1000)
+  let assert Ok(_) =
+    round_trip(g.CBInt(-18_446_744_073_709_551_616), "3bffffffffffffffff")
+
+  let assert Ok(_) = round_trip(g.CBInt(-1), "20")
+  let assert Ok(_) = round_trip(g.CBInt(-10), "29")
+  let assert Ok(_) = round_trip(g.CBInt(-100), "3863")
+  let assert Ok(_) = round_trip(g.CBInt(-1000), "3903e7")
 }
 
 pub fn decode_string_test() {
@@ -67,13 +96,27 @@ pub fn decode_array_test() {
     ]
 }
 
-fn round_trip(expected: g.CBOR, hex: String) {
+fn round_trip(expected: g.CBOR, hex: String) -> Result(Nil, String) {
   let assert Ok(binary) = bit_array.base16_decode(hex)
   let assert Ok(#(v, <<>>)) = d.decode(binary)
-  assert v == expected
+  use <- bool.guard(
+    v != expected,
+    Error(
+      "CBOR mismatch: "
+      <> string.inspect(v)
+      <> " != "
+      <> string.inspect(expected),
+    ),
+  )
 
   let assert Ok(encoded) = e.to_bit_array(v)
-  assert encoded == binary
+  case encoded == binary {
+    True -> Ok(Nil)
+    False -> {
+      let encoded_hex = bit_array.base16_encode(encoded)
+      Error("Binary mismatch, provided " <> hex <> " but got " <> encoded_hex)
+    }
+  }
 }
 
 pub fn decode_map_test() {
@@ -96,10 +139,19 @@ pub fn decode_null_test() {
 }
 
 pub fn decode_taggded_test() {
-  round_trip(
-    g.CBTagged(0, g.CBString("2013-03-21T20:04:00Z")),
-    "c074323031332d30332d32315432303a30343a30305a",
-  )
+  let assert Ok(payload) = bit_array.base16_decode("010000000000000000")
+  let assert Ok(_) =
+    round_trip(g.CBTagged(2, g.CBBinary(payload)), "c249010000000000000000")
+
+  let assert Ok(payload) = bit_array.base16_decode("010000000000000000")
+  let assert Ok(_) =
+    round_trip(g.CBTagged(3, g.CBBinary(payload)), "c349010000000000000000")
+
+  let assert Ok(_) =
+    round_trip(
+      g.CBTagged(0, g.CBString("2013-03-21T20:04:00Z")),
+      "c074323031332d30332d32315432303a30343a30305a",
+    )
 
   round_trip(g.CBTagged(1, g.CBInt(1_363_896_240)), "c11a514b67b0")
 }
