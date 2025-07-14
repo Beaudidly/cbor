@@ -1,3 +1,5 @@
+//// Tools for decoding binary CBOR data into Gleam types
+
 import gleam/bit_array
 import gleam/bool
 import gleam/dynamic
@@ -12,6 +14,7 @@ import ieee_float as i
 
 import gbor as g
 
+/// The error type for decoding CBOR data into Gleam types
 pub type CborDecodeError {
   DynamicDecodeError(List(gdd.DecodeError))
   MajorTypeError(Int)
@@ -20,6 +23,7 @@ pub type CborDecodeError {
   UnassignedError
 }
 
+/// Convert a CBOR Gleam value to a dynamic value for use with `gleam/dynamic/decode`
 pub fn cbor_to_dynamic(cbor: g.CBOR) -> dynamic.Dynamic {
   case cbor {
     g.CBInt(v) -> dynamic.int(v)
@@ -38,6 +42,21 @@ pub fn cbor_to_dynamic(cbor: g.CBOR) -> dynamic.Dynamic {
   }
 }
 
+/// Decode a tagged CBOR value.
+/// 
+/// Provided tag is the expected tag number for the value, and the decoder is run
+/// on the value corresponding to the tag.
+/// 
+/// For example, for a CBOR value with a tag number of `0`, the expected data item
+/// is a text string representing a standard time string, so one would call:
+/// 
+/// ```gleam
+/// import gleam/dynamic/decode as gdd
+/// tagged_decoder(0, gdd.string, "")
+/// ```
+/// 
+/// Reference: [RFC 8949 : 3.4 Tagging of Items](https://www.rfc-editor.org/rfc/rfc8949.html#name-tagging-of-items)
+/// 
 pub fn tagged_decoder(
   expected_tag: Int,
   decoder: gdd.Decoder(a),
@@ -58,7 +77,27 @@ pub fn tagged_decoder(
   gdd.at([2], decoder)
 }
 
-pub fn decode(data: BitArray) -> Result(#(g.CBOR, BitArray), CborDecodeError) {
+/// Decode a CBOR value from a bit array
+/// 
+/// This function is the main entry point for decoding CBOR data into Gleam types.
+/// 
+/// It takes a bit array and returns a result containing the decoded CBOR value
+/// 
+pub fn decode(data: BitArray) -> Result(g.CBOR, CborDecodeError) {
+  case decode_helper(data) {
+    Ok(#(v, <<>>)) -> Ok(v)
+    Ok(#(_, rest)) ->
+      Error(
+        DynamicDecodeError(gdd.decode_error(
+          expected: "Expected data, but got more",
+          found: dynamic.bit_array(rest),
+        )),
+      )
+    Error(e) -> Error(e)
+  }
+}
+
+fn decode_helper(data: BitArray) -> Result(#(g.CBOR, BitArray), CborDecodeError) {
   case data {
     <<0:3, min:5, rest:bits>> -> decode_uint(min, rest)
     <<1:3, min:5, rest:bits>> -> decode_int(min, rest)
@@ -105,7 +144,7 @@ fn decode_uint(
   }
 }
 
-pub fn decode_int(
+fn decode_int(
   min: Int,
   data: BitArray,
 ) -> Result(#(g.CBOR, BitArray), CborDecodeError) {
@@ -127,7 +166,7 @@ pub fn decode_int(
   Ok(#(g.CBInt(-1 - v), rest))
 }
 
-pub fn decode_float_or_simple_value(
+fn decode_float_or_simple_value(
   min: Int,
   data: BitArray,
 ) -> Result(#(g.CBOR, BitArray), CborDecodeError) {
@@ -155,7 +194,7 @@ pub fn decode_float_or_simple_value(
   }
 }
 
-pub fn decode_float(
+fn decode_float(
   data: BitArray,
   rest: BitArray,
 ) -> Result(#(g.CBOR, BitArray), CborDecodeError) {
@@ -186,7 +225,7 @@ pub fn decode_float(
   }
 }
 
-pub fn decode_bytes(
+fn decode_bytes(
   min: Int,
   data: BitArray,
 ) -> Result(#(g.CBOR, BitArray), CborDecodeError) {
@@ -194,7 +233,7 @@ pub fn decode_bytes(
   Ok(#(g.CBBinary(v), rest))
 }
 
-pub fn decode_string(
+fn decode_string(
   min: Int,
   data: BitArray,
 ) -> Result(#(g.CBOR, BitArray), CborDecodeError) {
@@ -214,7 +253,7 @@ pub fn decode_string(
   Ok(#(v, rest))
 }
 
-pub fn decode_bytes_helper(
+fn decode_bytes_helper(
   min: Int,
   data: BitArray,
 ) -> Result(#(BitArray, BitArray), CborDecodeError) {
@@ -238,7 +277,7 @@ pub fn decode_bytes_helper(
   }
 }
 
-pub fn decode_array(
+fn decode_array(
   min: Int,
   data: BitArray,
 ) -> Result(#(g.CBOR, BitArray), CborDecodeError) {
@@ -268,7 +307,7 @@ pub fn decode_array(
   Ok(#(g.CBArray(list.reverse(values)), rest))
 }
 
-pub fn decode_array_helper(
+fn decode_array_helper(
   data: BitArray,
   n: Int,
   acc: List(g.CBOR),
@@ -276,13 +315,13 @@ pub fn decode_array_helper(
   case n {
     0 -> Ok(#(acc, data))
     _ -> {
-      use #(v, rest_data) <- result.try(decode(data))
+      use #(v, rest_data) <- result.try(decode_helper(data))
       decode_array_helper(rest_data, n - 1, [v, ..acc])
     }
   }
 }
 
-pub fn decode_map(
+fn decode_map(
   min: Int,
   data: BitArray,
 ) -> Result(#(g.CBOR, BitArray), CborDecodeError) {
@@ -333,7 +372,7 @@ pub fn decode_map(
   Ok(#(map, rest))
 }
 
-pub fn decode_tagged(
+fn decode_tagged(
   min: Int,
   data: BitArray,
 ) -> Result(#(g.CBOR, BitArray), CborDecodeError) {
@@ -352,15 +391,10 @@ pub fn decode_tagged(
     }
   })
 
-  use #(tag_value, rest) <- result.try(decode(rest))
+  use #(tag_value, rest) <- result.try(decode_helper(rest))
 
   Ok(#(g.CBTagged(tag_num, tag_value), rest))
 }
 
 @external(erlang, "erl_gbor", "to_tagged")
-pub fn ffi_to_tagged(tag: Int, value: dynamic.Dynamic) -> dynamic.Dynamic
-
-@external(erlang, "erl_gbor", "check_tagged")
-pub fn ffi_check_tagged(
-  tagged: dynamic.Dynamic,
-) -> Result(#(Int, dynamic.Dynamic), String)
+fn ffi_to_tagged(tag: Int, value: dynamic.Dynamic) -> dynamic.Dynamic

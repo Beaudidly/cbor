@@ -1,3 +1,5 @@
+//// Module where we can find the functions used for getting the CBOR binary representation of a value
+
 import gleam/bit_array
 import gleam/list
 import gleam/result
@@ -11,46 +13,12 @@ pub type EncodeError {
   EncodeError(String)
 }
 
-pub fn int(value: Int) -> g.CBOR {
-  g.CBInt(value)
-}
-
-pub fn map(value: List(#(g.CBOR, g.CBOR))) -> g.CBOR {
-  g.CBMap(value)
-}
-
-pub fn string(value: String) -> g.CBOR {
-  g.CBString(value)
-}
-
-pub fn array(value: List(g.CBOR)) -> g.CBOR {
-  g.CBArray(value)
-}
-
-pub fn bool(value: Bool) -> g.CBOR {
-  g.CBBool(value)
-}
-
-pub fn null() -> g.CBOR {
-  g.CBNull
-}
-
-pub fn undefined() -> g.CBOR {
-  g.CBUndefined
-}
-
-pub fn float(value: Float) -> g.CBOR {
-  g.CBFloat(value)
-}
-
-pub fn binary(value: BitArray) -> g.CBOR {
-  g.CBBinary(value)
-}
-
+/// Encode a CBOR value to a bit array
 pub fn to_bit_array(value: g.CBOR) -> Result(BitArray, EncodeError) {
   case value {
     g.CBInt(v) if v >= 0 -> uint_encode(v)
     g.CBInt(v) if v < 0 -> int_encode(v)
+    g.CBInt(v) -> uint_encode(v)
     g.CBFloat(v) -> Ok(float_encode(v))
     g.CBBinary(v) -> binary_encode(BinaryEncoding(v))
     g.CBString(v) -> binary_encode(StringEncoding(v))
@@ -60,13 +28,10 @@ pub fn to_bit_array(value: g.CBOR) -> Result(BitArray, EncodeError) {
     g.CBTagged(t, v) -> tagged_encode(t, v)
     g.CBNull -> Ok(null_encode())
     g.CBUndefined -> Ok(undefined_encode())
-    v -> {
-      Error(EncodeError("Unknown CBOR value: " <> string.inspect(v)))
-    }
   }
 }
 
-pub fn uint_encode(value: Int) -> Result(BitArray, EncodeError) {
+fn uint_encode(value: Int) -> Result(BitArray, EncodeError) {
   case value {
     v if v < 24 -> Ok(<<0:3, v:5>>)
     // TODO verify limits
@@ -78,7 +43,7 @@ pub fn uint_encode(value: Int) -> Result(BitArray, EncodeError) {
   }
 }
 
-pub fn int_encode(value: Int) -> Result(BitArray, EncodeError) {
+fn int_encode(value: Int) -> Result(BitArray, EncodeError) {
   let value = { value * -1 } - 1
   case value {
     v if v < 24 -> Ok(<<1:3, v:5>>)
@@ -166,16 +131,6 @@ fn map_encode(value: List(#(g.CBOR, g.CBOR))) -> Result(BitArray, EncodeError) {
       Ok(bit_array.concat([acc, k_data, v_data]))
     }),
   )
-
-  //let data = list.try
-
-  //let data =
-  //  list.fold_right(value, <<>>, fn(acc, a) {
-  //    let k_data = to_bit_array(a.0)
-  //    let v_data = to_bit_array(a.1)
-
-  //    bit_array.concat([k_data, v_data, acc])
-  //  })
 
   case n_pairs {
     v if v < 24 -> Ok(<<5:3, v:5, data:bits>>)
