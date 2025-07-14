@@ -43,8 +43,6 @@ pub fn tagged_decoder(
   decoder: gdd.Decoder(a),
   zero: a,
 ) -> gdd.Decoder(a) {
-  let error = gdd.failure(zero, "CBOR tagged value")
-
   use cbor_tag <- gdd.field(0, atom.decoder())
   use <- bool.guard(
     cbor_tag != atom.create("cbor_tagged__"),
