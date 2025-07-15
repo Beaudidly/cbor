@@ -254,7 +254,7 @@ pub fn decode_dynamic_test() {
       "A2646E616D6574323031332D30332D32315432303A30343A30305A63646F62C074323031332D30332D32315432303A30343A30305A",
     )
 
-  let assert Ok(cbor_val) = d.decode(bin)
+  let assert Ok(cbor_val) = d.from_bit_array(bin)
   let dyn_val = d.cbor_to_dynamic(cbor_val)
 
   let decoder = {
@@ -272,7 +272,7 @@ pub fn decode_dynamic_test() {
 
 fn round_trip(expected: g.CBOR, hex: String) -> Result(Nil, String) {
   let assert Ok(binary) = bit_array.base16_decode(hex)
-  let assert Ok(v) = d.decode(binary)
+  let assert Ok(v) = d.from_bit_array(binary)
   use <- bool.guard(
     v != expected,
     Error(

@@ -83,7 +83,7 @@ pub fn tagged_decoder(
 /// 
 /// It takes a bit array and returns a result containing the decoded CBOR value
 /// 
-pub fn decode(data: BitArray) -> Result(g.CBOR, CborDecodeError) {
+pub fn from_bit_array(data: BitArray) -> Result(g.CBOR, CborDecodeError) {
   case decode_helper(data) {
     Ok(#(v, <<>>)) -> Ok(v)
     Ok(#(_, rest)) ->
