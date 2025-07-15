@@ -6,10 +6,8 @@
 A CBOR encoding/decoding library for Gleam.
 
 # Installation
-Add GitHub
-```toml
-[dependencies]
-gbor = { git = "git@github.com:Beaudidly/gbor.git", ref = "main" }
+```sh
+gleam add gbor@1
 ```
 
 # Usage
